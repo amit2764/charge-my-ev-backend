@@ -104,17 +104,18 @@ function setupFirestoreListeners(socket, userId, requestId, bookingId) {
             ...change.doc.data()
           };
 
-        socket.emit('response_update', {
+          socket.emit('response_update', {
             type: 'response_update',
             action: change.type, // 'added', 'modified', 'removed'
             response: response
-        });
+          });
         });
       }, (error) => {
         console.error('Responses listener error:', error);
         socket.emit('error', {
           type: 'error',
           error: 'Failed to listen for responses'
+        });
       });
 
     // Store unsubscribe function for cleanup
@@ -131,18 +132,19 @@ function setupFirestoreListeners(socket, userId, requestId, bookingId) {
           ...change.doc.data()
         };
 
-      socket.emit('booking_update', {
-          type: 'booking_update',
-          action: change.type,
-          booking: booking
-      });
+          socket.emit('booking_update', {
+            type: 'booking_update',
+            action: change.type,
+            booking: booking
+          });
       });
     }, (error) => {
       console.error('Bookings listener error:', error);
         socket.emit('error', {
-        type: 'error',
-        error: 'Failed to listen for bookings'
-    });
+          type: 'error',
+          error: 'Failed to listen for bookings'
+        });
+      });
 
   // Store unsubscribe function
   socket.bookingsUnsubscribe = bookingsUnsubscribe;
@@ -157,17 +159,18 @@ function setupFirestoreListeners(socket, userId, requestId, bookingId) {
             ...doc.data()
           };
 
-        socket.emit('booking_detail_update', {
-            type: 'booking_detail_update',
-            booking: booking
-        });
+            socket.emit('booking_detail_update', {
+              type: 'booking_detail_update',
+              booking: booking
+            });
         }
       }, (error) => {
         console.error('Booking detail listener error:', error);
         socket.emit('error', {
           type: 'error',
           error: 'Failed to listen for booking details'
-      });
+          });
+        });
 
     socket.bookingUnsubscribe = bookingUnsubscribe;
   }
