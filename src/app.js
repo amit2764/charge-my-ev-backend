@@ -172,13 +172,15 @@ app.post('/api/request', async (req, res) => {
 
     if (result.success) {
       // Send push notifications to nearby hosts (async, don't wait)
-      notifyNewRequest(result.request.id, {
-        userId,
-        location,
-        vehicleType
-      }).catch(error => {
-        console.error('Failed to send new request notifications:', error);
-      });
+      if (typeof notifyNewRequest === 'function') {
+        notifyNewRequest(result.request.id, {
+          userId,
+          location,
+          vehicleType
+        }).catch(error => {
+          console.error('Failed to send new request notifications:', error);
+        });
+      }
 
       res.status(201).json(result);
     } else {
@@ -189,7 +191,7 @@ app.post('/api/request', async (req, res) => {
     console.error('Create charging request endpoint error:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: `Internal server error: ${error.message}`
     });
   }
 });
@@ -276,7 +278,7 @@ app.post('/api/respond', async (req, res) => {
       if (responseData.status && responseData.status.toUpperCase() === 'ACCEPTED') {
         // Get request details to find userId
         const requestResult = await getChargingRequest(requestId);
-        if (requestResult.success) {
+        if (requestResult.success && typeof notifyRequestAccepted === 'function') {
           notifyRequestAccepted(requestId, requestResult.request.userId, result.response)
             .catch(error => {
               console.error('Failed to send request accepted notification:', error);
@@ -293,7 +295,7 @@ app.post('/api/respond', async (req, res) => {
     console.error('Create host response endpoint error:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: `Internal server error: ${error.message}`
     });
   }
 });
