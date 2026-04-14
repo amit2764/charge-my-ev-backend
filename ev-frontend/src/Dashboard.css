@@ -1,0 +1,184 @@
+:root {
+  --ev-green: #00C853;
+  --ev-green-light: #B9F6CA;
+  --bg-color: #F5F7FA;
+  --card-bg: #FFFFFF;
+  --text-main: #1D1D1F;
+  --text-muted: #86868B;
+  --danger: #FF3B30;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 24px rgba(0,168,84,0.2);
+}
+
+/* Mobile App Container */
+.app-container {
+  background-color: var(--bg-color);
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0 auto;
+  max-width: 480px; /* Locks it to a phone size on desktop */
+  box-shadow: 0 0 20px rgba(0,0,0,0.05);
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: 90px; /* Space for bottom nav */
+}
+
+/* Top Header */
+.app-header {
+  background: var(--card-bg);
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: var(--shadow-sm);
+}
+
+.app-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.5px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.phone-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: #f0f0f0;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* Map Placeholder / Hero Area */
+.map-hero {
+  background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+  height: 180px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.map-hero h1 {
+  margin: 0;
+  color: #00695C;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.map-hero p {
+  color: #004D40;
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Main Content List */
+.content-section {
+  padding: 24px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 16px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  color: var(--ev-green);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Sleek Cards */
+.charger-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(0,0,0,0.02);
+  transition: transform 0.2s ease;
+}
+
+.charger-card:active {
+  transform: scale(0.98);
+}
+
+.charger-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.charger-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-main);
+}
+
+.distance-badge {
+  background: var(--ev-green-light);
+  color: #004D40;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+/* Floating Action Button (FAB) */
+.fab-container {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+}
+
+.fab-button {
+  background: var(--text-main);
+  color: white;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

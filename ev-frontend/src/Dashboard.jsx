@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from './api';
+import './Dashboard.css';
 
 export default function Dashboard({ user, onLogout }) {
   const [chargers, setChargers] = useState([]);
@@ -42,41 +43,47 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '800px', margin: '0 auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-        <h2 style={{ margin: 0 }}>Charge My EV ⚡</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontWeight: 'bold', color: '#555' }}>{user}</span>
-          <button onClick={onLogout} style={{ padding: '6px 12px', cursor: 'pointer', background: '#ffebee', color: '#c62828', border: '1px solid #ffcdd2', borderRadius: '4px' }}>Logout</button>
+    <div className="app-container">
+      {/* Top Navigation */}
+      <header className="app-header">
+        <h2>Charge My EV</h2>
+        <div className="user-profile">
+          <span className="phone-badge">{user.slice(-4)}</span>
+          <button className="logout-btn" onClick={onLogout}>Logout</button>
         </div>
       </header>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button onClick={fetchChargers} style={{ padding: '10px 20px', background: '#2E7D32', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-          🔄 Refresh List
-        </button>
-        <button onClick={handleRequestCharge} style={{ padding: '10px 20px', background: '#1976D2', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-          ⚡ Request a Charge Here
-        </button>
+      {/* Hero / Map Area */}
+      <div className="map-hero">
+        <h1>{chargers.length}</h1>
+        <p>Chargers near you in San Francisco</p>
       </div>
 
-      {loading && <p style={{ color: '#666' }}>Locating chargers near you...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {/* Main Content */}
+      <div className="content-section">
+        <div className="section-title">
+          <span>Nearby Stations</span>
+          <button className="refresh-btn" onClick={fetchChargers}>Refresh</button>
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '15px' }}>
+        {loading && <p style={{ color: '#86868b', textAlign: 'center' }}>Locating chargers...</p>}
+        {error && <p style={{ color: '#FF3B30', textAlign: 'center' }}>{error}</p>}
+
         {chargers.map(charger => (
-          <div key={charger.id} style={{ border: '1px solid #e0e0e0', padding: '20px', borderRadius: '12px', background: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>{charger.name}</h3>
-            <p style={{ margin: '5px 0', color: '#555' }}><strong>📍 Distance:</strong> {charger.distance} km away</p>
-            <p style={{ margin: '5px 0', color: '#555' }}><strong>🔌 Type:</strong> {charger.chargerType} ({charger.powerOutput}kW)</p>
-            <p style={{ margin: '5px 0', color: '#555' }}><strong>💰 Price:</strong> ${charger.pricePerHour}/hr</p>
-            <p style={{ margin: '10px 0 0 0', fontWeight: 'bold', color: charger.availability === 'AVAILABLE' ? '#2E7D32' : '#f57c00' }}>
-              ● {charger.availability}
-            </p>
+          <div className="charger-card" key={charger.id}>
+            <div className="charger-header">
+              <h3>{charger.name}</h3>
+              <span className="distance-badge">{charger.distance} km</span>
+            </div>
+            <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#86868b' }}>{charger.chargerType} • {charger.powerOutput}kW</p>
+            <p style={{ margin: 0, fontWeight: '600', color: '#1D1D1F' }}>${charger.pricePerHour}/hr</p>
           </div>
         ))}
-        {!loading && chargers.length === 0 && <p>No chargers found nearby.</p>}
       </div>
-    </div>
-  );
-}
+
+      {/* Floating Action Button */}
+      <div className="fab-container">
+        <button className="fab-button" onClick={handleRequestCharge}>
+          ⚡ Request Charge
+        </button>
+      </div>
