@@ -42,6 +42,33 @@ function validatePhone(phone) {
 }
 
 /**
+ * Helper to dispatch SMS via Fast2SMS
+ */
+async function sendSmsViaFast2SMS(phone, otp) {
+  const smsApiKey = process.env.SMS_API_KEY || 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
+  if (!smsApiKey) return;
+  
+  try {
+    const response = await axios.get('https://www.fast2sms.com/dev/bulkV2', {
+      params: {
+        authorization: smsApiKey,
+        variables_values: otp,
+        route: 'otp',
+        numbers: phone.replace(/\D/g, '').slice(-10)
+      }
+    });
+    
+    if (!response.data.return) {
+      console.warn('SMS Gateway warning:', response.data.message);
+    } else {
+      console.log(`[PROD] SMS actually sent to ${phone}`); 
+    }
+  } catch (smsError) {
+    console.error('Failed to send SMS via provider:', smsError.response?.data || smsError.message);
+  }
+}
+
+/**
  * Sends OTP to phone number (mock implementation - no SMS API)
  * @param {string} phone - Phone number
  * @returns {Promise<Object>} Success/error response
@@ -85,34 +112,10 @@ async function sendOTP(phone) {
         attempts: 0
       });
 
-      // SMS Provider Integration (e.g., Twilio, Msg91, Fast2SMS)
-      const smsApiKey = process.env.SMS_API_KEY || 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
-
-      if (smsApiKey) {
-        try {
-          // Example using Fast2SMS (Popular & cost-effective for Indian numbers)
-          // Replace URL and payload if using Msg91, Twilio, or AWS SNS later
-          const response = await axios.get('https://www.fast2sms.com/dev/bulkV2', {
-            params: {
-              authorization: smsApiKey,
-              variables_values: otp,
-              route: 'otp',
-              numbers: phone.replace(/\D/g, '').slice(-10) // Extract 10-digit number safely
-            }
-          });
-          
-          if (!response.data.return) {
-            throw new Error(response.data.message || 'SMS Gateway rejected request');
-          }
-          
-          console.log(`[PROD] SMS actually sent to ${phone}`); 
-        } catch (smsError) {
-          console.error('Failed to send SMS via provider:', smsError.response?.data || smsError.message);
-          return { success: false, error: 'Failed to dispatch SMS' };
-        }
-      } else {
-        console.log(`[DEV/MOCK] OTP for ${phone}: ${otp}`); // Log OTP instead of sending SMS
-      }
+      console.log(`[DEV] Generated OTP for ${phone}: ${otp}`);
+      
+      // Always try to send SMS
+      await sendSmsViaFast2SMS(phone, otp);
 
       return {
         success: true,
