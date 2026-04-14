@@ -1314,7 +1314,7 @@ app.use((req, res) => {
   });
 });
 
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server is actively listening on port ${PORT}`);
   
   // Initialize monitoring system
