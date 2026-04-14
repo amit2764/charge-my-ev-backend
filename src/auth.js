@@ -334,11 +334,21 @@ async function isUserVerified(phone) {
   };
 }
 
+async function ensureVerifiedUser(phone) {
+  const result = await isUserVerified(phone);
+  if (!result.success) return result;
+  if (!result.verified) {
+    return { success: false, error: 'User phone number must be verified to perform this action' };
+  }
+  return { success: true };
+}
+
 module.exports = {
   sendOTP,
   verifyOTP,
   validatePhone,
   generateOTP,
   getUser,
-  isUserVerified
+  isUserVerified,
+  ensureVerifiedUser
 };
