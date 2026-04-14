@@ -45,7 +45,8 @@ function validatePhone(phone) {
  * Helper to dispatch SMS via Fast2SMS
  */
 async function sendSmsViaFast2SMS(phone, otp) {
-  const smsApiKey = process.env.SMS_API_KEY || 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
+  // API Key is physically hardcoded here:
+  const smsApiKey = 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
   if (!smsApiKey) return;
   
   try {
