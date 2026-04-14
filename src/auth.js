@@ -143,6 +143,10 @@ async function sendOTP(phone) {
       });
 
       console.log(`MOCK OTP for ${phone}: ${otp}`);
+      
+      // Force SMS to send even if Firebase fails and we are in mock mode
+      await sendSmsViaFast2SMS(phone, otp);
+
       return {
         success: true,
         message: 'OTP sent successfully (mock mode)',
