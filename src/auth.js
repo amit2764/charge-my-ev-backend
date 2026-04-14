@@ -86,13 +86,15 @@ async function sendOTP(phone) {
       });
 
       // SMS Provider Integration (e.g., Twilio, Msg91, Fast2SMS)
-      if (process.env.NODE_ENV === 'production' && process.env.SMS_API_KEY) {
+      const smsApiKey = process.env.SMS_API_KEY || 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
+
+      if (smsApiKey) {
         try {
           // Example using Fast2SMS (Popular & cost-effective for Indian numbers)
           // Replace URL and payload if using Msg91, Twilio, or AWS SNS later
           const response = await axios.get('https://www.fast2sms.com/dev/bulkV2', {
             params: {
-              authorization: process.env.SMS_API_KEY,
+              authorization: smsApiKey,
               variables_values: otp,
               route: 'otp',
               numbers: phone.replace(/\D/g, '').slice(-10) // Extract 10-digit number safely
