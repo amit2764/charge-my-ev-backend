@@ -219,6 +219,29 @@ app.get('/api/request/:id', async (req, res) => {
   }
 });
 
+// API endpoint to get pending requests for hosts
+app.get('/api/requests/pending', async (req, res) => {
+  try {
+    const { db, mockMode } = require('./config/firebase');
+    if (mockMode) return res.status(200).json({ success: true, requests: [] });
+
+    const snapshot = await db.collection('requests')
+      .where('status', '==', 'OPEN')
+      .limit(10)
+      .get();
+
+    const requests = [];
+    snapshot.forEach(doc => {
+      requests.push({ id: doc.id, distance: 'Nearby', rating: '5.0', ...doc.data() });
+    });
+
+    res.status(200).json({ success: true, requests });
+  } catch (error) {
+    console.error('Pending requests endpoint error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch requests' });
+  }
+});
+
 // API endpoint to get nearby charging stations
 app.get('/api/chargers/nearby', async (req, res) => {
   try {
@@ -463,6 +486,57 @@ app.post('/api/stop', async (req, res) => {
       success: false,
       error: 'Internal server error'
     });
+  }
+});
+
+// API endpoint to get user booking history
+app.get('/api/bookings/history/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { db, mockMode } = require('./config/firebase');
+    if (mockMode) return res.status(200).json({ success: true, bookings: [] });
+
+    const snapshot = await db.collection('bookings')
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(20)
+      .get();
+
+    const bookings = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      bookings.push({ id: doc.id, date: data.createdAt?.toDate?.()?.toLocaleDateString() || 'Recent', host: `Host ${data.hostId.slice(-4)}`, duration: `${data.durationMinutes || 0} mins`, amount: data.finalAmount || 0, status: data.status, ...data });
+    });
+
+    res.status(200).json({ success: true, bookings });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch history' });
+  }
+});
+
+// API endpoint to get host earnings
+app.get('/api/hosts/:hostId/earnings', async (req, res) => {
+  try {
+    const { hostId } = req.params;
+    const { db, mockMode } = require('./config/firebase');
+    if (mockMode) return res.status(200).json({ success: true, sessions: [] });
+
+    const snapshot = await db.collection('bookings')
+      .where('hostId', '==', hostId)
+      .where('status', '==', 'COMPLETED')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+
+    const sessions = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      sessions.push({ id: doc.id, date: data.createdAt?.toDate?.()?.toLocaleDateString() || 'Recent', user: `User ${data.userId.slice(-4)}`, duration: `${data.durationMinutes || 0} mins`, amount: data.finalAmount || 0, ...data });
+    });
+
+    res.status(200).json({ success: true, sessions });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch earnings' });
   }
 });
 
@@ -1050,6 +1124,32 @@ app.post('/api/notifications/token', async (req, res) => {
 //
 // MONITORING ENDPOINTS (Admin Only)
 //
+
+// API endpoint for Admin Login
+app.post('/api/admin/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const adminKey = process.env.ADMIN_API_KEY;
+
+    if (!adminKey) {
+      return res.status(500).json({ success: false, error: 'Server misconfigured: ADMIN_API_KEY missing' });
+    }
+
+    if (password !== adminKey) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+
+    let role = 'READ_ONLY';
+    if (email.includes('super')) role = 'SUPER_ADMIN';
+    else if (email.includes('ops')) role = 'OPS_MANAGER';
+    else if (email.includes('support')) role = 'SUPPORT_AGENT';
+
+    res.status(200).json({ success: true, token: adminKey, role, user: { email, name: 'Operator' } });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 // Get monitoring metrics
 app.get('/api/admin/monitoring/metrics', requireAdmin, (req, res) => {
