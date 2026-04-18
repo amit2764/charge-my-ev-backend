@@ -205,7 +205,7 @@ export default function UserFlow() {
               <Button variant="outline" size="sm" className="py-2 text-xs" onClick={() => window.open(`tel:${selectedHost?.hostPhone || '+1234567890'}`)}>📞 Call Host</Button>
             </div>
 
-            {activeBooking.status === 'BOOKED' ? 
+            {(activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') ? 
               <>
                 <p className="text-xs text-gray-500 mb-4">Provide the Start OTP to your host</p>
                 <Input placeholder="Start OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono" />

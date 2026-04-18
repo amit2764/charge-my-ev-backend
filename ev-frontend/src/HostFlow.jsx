@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from './api';
+import { socket } from './socket';
 import { useStore } from './store';
 import { Button, Card, Input } from './components';
 import HostOnboarding from './HostOnboarding';
@@ -31,38 +32,60 @@ export default function HostFlow() {
     return () => clearInterval(interval);
   }, [activeBooking]);
 
-  // Poll for requests ONLY if available and no active booking
+  // Realtime host channel: receive new requests and booking confirmations.
   useEffect(() => {
-    let poll;
-    if (isHostAvailable && !activeBooking) {
-      poll = setInterval(() => {
-        // Fetch real pending requests from the backend
+    socket.connect();
+
+    const onNewRequest = ({ request }) => {
+      if (!request || activeBooking) return;
+      setRequests(prev => {
+        const exists = prev.some(r => r.id === request.id);
+        return exists ? prev : [...prev, request];
+      });
+    };
+
+    const onBookingConfirmed = ({ booking }) => {
+      if (!booking || booking.hostId !== user) return;
+      setActiveBooking(booking);
+      setRequests([]);
+    };
+
+    socket.on('new_request', onNewRequest);
+    socket.on('booking_confirmed', onBookingConfirmed);
+
+    if (isHostAvailable) {
+      socket.emit('subscribe', { hostId: user });
+
+      // Bootstrap pending requests once when going online.
+      if (!activeBooking) {
         api.get('/api/requests/pending')
           .then(res => {
-            if (res.data && res.data.requests) {
-              setRequests(res.data.requests);
-            }
-          }).catch(err => console.log('Polling for real requests...'));
-      }, 4000);
+            if (res.data && res.data.requests) setRequests(res.data.requests);
+          })
+          .catch(() => {});
+      }
     }
-    if (!isHostAvailable) setRequests([]); // Clear requests if offline
-    return () => clearInterval(poll);
-  }, [isHostAvailable, activeBooking, requests.length]);
+
+    if (!isHostAvailable) setRequests([]);
+
+    return () => {
+      socket.off('new_request', onNewRequest);
+      socket.off('booking_confirmed', onBookingConfirmed);
+      socket.disconnect();
+    };
+  }, [isHostAvailable, activeBooking, user, setActiveBooking]);
 
   const acceptRequest = async (reqId) => {
     setLoading(true); setError('');
     try {
-      await api.post('/api/respond', { requestId: reqId, hostId: user, status: 'ACCEPTED', price: parseFloat(price), estimatedArrival: 5 });
-      
-      // In a real app, we wait for the user to confirm the booking via socket.
-      // For UI demonstration, we will auto-transition to a mock booking state.
-      setActiveBooking({
-        id: `booking_${Date.now()}`,
-        status: 'BOOKED',
+      await api.post('/api/respond', {
+        requestId: reqId,
+        hostId: user,
+        status: 'ACCEPTED',
         price: parseFloat(price),
-        userId: 'Driver_9921'
+        estimatedArrival: 5,
+        hostLocation: hostProfile?.location || null
       });
-      setRequests([]);
     } catch (err) { 
       setError('Failed to send offer: ' + (err.response?.data?.error || err.message)); 
     } finally { setLoading(false); }
@@ -110,7 +133,7 @@ export default function HostFlow() {
         <Card className="text-center py-8">
           <p className="text-sm text-gray-400 mb-4">Vehicle: <span className="text-white font-bold">{activeBooking.userId}</span></p>
           
-          {activeBooking.status === 'BOOKED' ? (
+          {(activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') ? (
             <>
               <p className="text-xs text-gray-500 mb-2">Driver is arriving. Ask them for the Start OTP.</p>
               <Input placeholder="Enter Start OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono mb-4" />
