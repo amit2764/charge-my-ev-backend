@@ -40,12 +40,13 @@ jobs:
           cache: 'npm'
 
       - name: Install frontend dependencies
-        run: cd ev-frontend && npm install
+        run: cd ev-frontend && npm install --legacy-peer-deps
 
       - name: Build frontend
         env:
           VITE_ENVIRONMENT: production
-          VITE_API_BASE_URL: https://api.chargemyev.com
+          VITE_API_BASE_URL: https://charge-my-ev-backend-production.up.railway.app
+          NPM_CONFIG_LEGACY_PEER_DEPS: true
         run: cd ev-frontend && npm run build
 
       - name: Check build output
