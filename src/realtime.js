@@ -2,12 +2,14 @@ const { Server } = require('socket.io');
 
 let io;
 
-function initializeWebSocketServer(server) {
+function initializeWebSocketServer(server, options = {}) {
   io = new Server(server, {
+    path: '/ws',
     cors: {
       origin: process.env.CORS_ORIGIN || '*',
       methods: ['GET', 'POST']
-    }
+    },
+    ...options
   });
 
   io.on('connection', (socket) => {

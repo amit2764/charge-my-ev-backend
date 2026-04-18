@@ -1,7 +1,9 @@
 const express = require('express');
 const http = require('http');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const logger = require('./lib/logger');
+const { initializeWebSocketServer } = require('./realtime');
 
 // Module route registrations
 const authModule = require('./modules/auth');
@@ -15,6 +17,17 @@ const notificationsModule = require('./modules/notifications');
 const adminModule = require('./modules/admin');
 
 const app = express();
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+
+const corsOptions = {
+  origin: corsOrigin,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 
 // Basic health
@@ -38,6 +51,14 @@ app.use((err, req, res, next) => {
 });
 
 const server = http.createServer(app);
+initializeWebSocketServer(server, {
+  path: '/ws',
+  cors: {
+    origin: corsOrigin,
+    methods: ['GET', 'POST']
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   logger.info(`Server listening on port ${PORT}`);
