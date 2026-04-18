@@ -202,9 +202,36 @@ async function respondToRequest(req, res) {
       // Firestore transaction: atomically update request and create response
       await db.runTransaction(async (txn) => {
         const currentSnap = await txn.get(requestRef);
+        if (!currentSnap.exists) {
+          throw new Error('Request not found');
+        }
+
         const current = currentSnap.data();
-        if (current.status === 'RESPONDING' && current.acceptedBy && current.acceptedBy !== hostId) {
+        const normalized = resetExpiredAcceptances({ ...current });
+
+        // If a stale lock expired, clear it first so new hosts can accept.
+        if (
+          current.status !== normalized.status ||
+          current.acceptedBy !== normalized.acceptedBy ||
+          current.acceptanceExpiresAt !== normalized.acceptanceExpiresAt
+        ) {
+          txn.update(requestRef, {
+            status: normalized.status,
+            acceptedBy: normalized.acceptedBy || null,
+            acceptanceExpiresAt: normalized.acceptanceExpiresAt || null
+          });
+        }
+
+        if (isExpired(normalized.expiresAt)) {
+          throw new Error('Request not found or expired');
+        }
+
+        if (normalized.status === 'RESPONDING' && normalized.acceptedBy && normalized.acceptedBy !== hostId) {
           throw new Error('Another host already accepted this request');
+        }
+
+        if (normalized.status !== 'OPEN' && normalized.status !== 'RESPONDING') {
+          throw new Error('Request is no longer available');
         }
 
         // Lock request to this host

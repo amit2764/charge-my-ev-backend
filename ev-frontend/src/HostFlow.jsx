@@ -70,8 +70,23 @@ export default function HostFlow() {
       setRequests([]);
     };
 
+    // When host verified start PIN → update booking status
+    const onSessionStarted = ({ booking }) => {
+      if (!booking || booking.hostId !== user) return;
+      setActiveBooking(booking);
+    };
+
+    // When session ends
+    const onSessionStopped = ({ booking, finalAmount }) => {
+      if (!booking || booking.hostId !== user) return;
+      setActiveBooking({ ...booking, finalAmount });
+      setElapsedSeconds(0);
+    };
+
     socket.on('new_request', onNewRequest);
     socket.on('booking_confirmed', onBookingConfirmed);
+    socket.on('session_started', onSessionStarted);
+    socket.on('session_stopped', onSessionStopped);
 
     if (isHostAvailable) {
       socket.emit('subscribe', {
@@ -102,6 +117,8 @@ export default function HostFlow() {
     return () => {
       socket.off('new_request', onNewRequest);
       socket.off('booking_confirmed', onBookingConfirmed);
+      socket.off('session_started', onSessionStarted);
+      socket.off('session_stopped', onSessionStopped);
       socket.disconnect();
     };
   }, [isHostAvailable, activeBooking, user, hostProfile, radiusKm, setActiveBooking]);
@@ -212,32 +229,57 @@ export default function HostFlow() {
         {error && <div className="p-3 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg animate-pulse">{error}</div>}
         
         <Card className="text-center py-8">
-          <p className="text-sm text-gray-400 mb-4">Vehicle: <span className="text-white font-bold">{activeBooking.userId}</span></p>
+          <p className="text-sm text-gray-400 mb-6">User: <span className="text-white font-bold">{activeBooking.userId?.slice(-6)}</span></p>
           
-          {(activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') ? (
+          {/* ===== CONFIRMED: waiting for user to arrive, host enters Start PIN ===== */}
+          {(activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') && (
             <>
-              <p className="text-xs text-gray-500 mb-2">Driver is arriving. Ask them for the Start OTP.</p>
-              <Input placeholder="Enter Start OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono mb-4" />
-              <Button onClick={startSession} disabled={loading}>{loading ? 'Verifying...' : 'Verify & Start Charge'}</Button>
+              <p className="text-sm text-gray-300 mb-1">Ask the user to show their <span className="text-cyan-400 font-bold">Start PIN</span> on their phone.</p>
+              <p className="text-xs text-gray-500 mb-5">Type the 4-digit code shown on their screen</p>
+              <Input
+                placeholder="Start PIN from user’s screen"
+                value={otpInput}
+                onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className="text-center text-4xl tracking-[0.5em] font-mono mb-4"
+                maxLength={4}
+              />
+              <Button onClick={startSession} disabled={loading || otpInput.length !== 4}>
+                {loading ? 'Verifying...' : '⚡ Start Charge'}
+              </Button>
             </>
-          ) : activeBooking.status === 'COMPLETED' ? (
+          )}
+
+          {/* ===== STARTED: charging running ===== */}
+          {activeBooking.status === 'STARTED' && (
             <>
-              <div className="my-6">
-                <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
-                <p className="text-5xl text-green-400 font-black mb-4">${activeBooking.finalAmount}</p>
-              </div>
-              <Button onClick={() => setActiveBooking(null)}>Return to Dashboard</Button>
-            </>
-          ) : (
-            <>
-              <div className="my-6">
+              <p className="text-xs text-green-400 uppercase tracking-widest mb-4">⚡ Charging In Progress</p>
+              <div className="my-4">
                 <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Current Earnings</p>
-                <p className="text-5xl text-green-400 font-black mb-4">${currentEarnings}</p>
-                <p className="text-3xl font-mono text-white mb-2">{formatTime(elapsedSeconds)}</p>
+                <p className="text-5xl text-green-400 font-black mb-2">${currentEarnings}</p>
+                <p className="text-3xl font-mono text-white mb-4">{formatTime(elapsedSeconds)}</p>
               </div>
-              <p className="text-xs text-gray-500 mb-2">Ask driver for End OTP to finish.</p>
-              <Input placeholder="Enter End OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono mb-4" />
-              <Button variant="danger" onClick={stopSession} disabled={loading}>{loading ? 'Stopping...' : 'Verify & Stop Charge'}</Button>
+              <p className="text-sm text-gray-300 mb-1">Ask the user to show their <span className="text-orange-400 font-bold">Stop PIN</span> to end the session.</p>
+              <p className="text-xs text-gray-500 mb-5">Type the 4-digit code shown on their screen</p>
+              <Input
+                placeholder="Stop PIN from user’s screen"
+                value={otpInput}
+                onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                className="text-center text-4xl tracking-[0.5em] font-mono mb-4"
+                maxLength={4}
+              />
+              <Button variant="danger" onClick={stopSession} disabled={loading || otpInput.length !== 4}>
+                {loading ? 'Stopping...' : '⏹ Stop Charge'}
+              </Button>
+            </>
+          )}
+
+          {/* ===== COMPLETED ===== */}
+          {activeBooking.status === 'COMPLETED' && (
+            <>
+              <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
+              <p className="text-5xl text-green-400 font-black my-6">${activeBooking.finalAmount}</p>
+              <p className="text-gray-400 mb-6">{activeBooking.durationMinutes?.toFixed(1)} mins charging</p>
+              <Button onClick={() => { setActiveBooking(null); setOtpInput(''); }}>Return to Dashboard</Button>
             </>
           )}
         </Card>

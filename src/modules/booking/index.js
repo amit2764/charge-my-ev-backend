@@ -4,6 +4,10 @@ const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
 const { emitToRequest, emitToUser, emitToHost } = require('../../realtime');
 
+function generatePin() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
 async function createBooking(req, res) {
   try {
     const { userId, hostId, requestId, price } = req.body || {};
@@ -14,6 +18,7 @@ async function createBooking(req, res) {
     const bookingId = `booking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     if (!db || mockMode) {
+      const startPin = generatePin();
       const booking = {
         id: bookingId,
         userId,
@@ -21,8 +26,12 @@ async function createBooking(req, res) {
         requestId,
         price: Number(price) || 5,
         status: 'CONFIRMED',
+        startPin,
         createdAt: new Date().toISOString()
       };
+      // Emit startPin only to user (not host), user shows it on their screen
+      emitToUser(userId, 'booking_confirmed', { booking });
+      emitToHost(hostId, 'booking_confirmed', { booking: { ...booking, startPin: undefined } });
       return res.json({ success: true, booking });
     }
 
@@ -33,6 +42,17 @@ async function createBooking(req, res) {
       if (!requestSnap.exists) throw new Error('Request not found');
 
       const requestData = requestSnap.data();
+      const acceptanceExpired = requestData.acceptanceExpiresAt && new Date(requestData.acceptanceExpiresAt).getTime() <= Date.now();
+
+      // Clear stale acceptance lock if it expired.
+      if (requestData.status === 'RESPONDING' && acceptanceExpired) {
+        txn.update(requestRef, {
+          status: 'OPEN',
+          acceptedBy: null,
+          acceptanceExpiresAt: null
+        });
+        throw new Error('Accepted offer expired. Please wait for a fresh host acceptance.');
+      }
 
       // ============ KEY LOGIC: Only the accepted host can confirm booking (like Uber) ============
       if (requestData.status === 'RESPONDING' && requestData.acceptedBy && requestData.acceptedBy !== hostId) {
@@ -53,6 +73,8 @@ async function createBooking(req, res) {
       );
       if (responseQuery.empty) throw new Error('Selected host has no active offer for this request');
 
+      const startPin = generatePin();
+
       booking = {
         id: bookingId,
         userId,
@@ -60,6 +82,7 @@ async function createBooking(req, res) {
         requestId,
         price: Number(price) || 5,
         status: 'CONFIRMED',
+        startPin,
         createdAt: new Date().toISOString()
       };
 
@@ -75,15 +98,16 @@ async function createBooking(req, res) {
 
     await cache.set(`booking:${booking.id}`, booking, 60);
 
-    const payload = { booking };
-    emitToRequest(requestId, 'booking_confirmed', payload);
-    emitToUser(userId, 'booking_confirmed', payload);
-    emitToHost(hostId, 'booking_confirmed', payload);
+    // Emit startPin only to user (user shows the PIN on their screen to the host)
+    emitToRequest(requestId, 'booking_confirmed', { booking: { ...booking, startPin: undefined } });
+    emitToUser(userId, 'booking_confirmed', { booking });          // user sees startPin
+    emitToHost(hostId, 'booking_confirmed', { booking: { ...booking, startPin: undefined } }); // host does NOT see pin
 
+    // Return pin to caller (user-side client)
     return res.json({ success: true, booking });
   } catch (err) {
     logger.error('createBooking failed', { err: err.message });
-    const status = err.message?.includes('superseded') ? 409 : 400;
+    const status = (err.message?.includes('superseded') || err.message?.includes('expired')) ? 409 : 400;
     return res.status(status).json({ success: false, error: err.message || 'Booking failed' });
   }
 }
