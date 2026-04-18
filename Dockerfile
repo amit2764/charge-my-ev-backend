@@ -13,7 +13,6 @@ RUN npm ci --only=production
 
 # Copy source code
 COPY src ./src
-COPY key.json ./key.json
 
 # Expose port
 EXPOSE 3000
