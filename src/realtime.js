@@ -1,7 +1,9 @@
 const { Server } = require('socket.io');
+const { haversineDistance } = require('./lib/geohash');
 
 let io;
 const hostSocketCounts = new Map();
+const hostRegistry = new Map();
 
 function initializeWebSocketServer(server, options = {}) {
   io = new Server(server, {
@@ -18,7 +20,7 @@ function initializeWebSocketServer(server, options = {}) {
 
     // Handle frontend subscription (rooms)
     socket.on('subscribe', (data) => {
-      const { userId, requestId, hostId } = data || {};
+      const { userId, requestId, hostId, hostLocation, searchRadiusKm } = data || {};
       
       if (userId) {
         socket.join(`user:${userId}`);
@@ -37,6 +39,13 @@ function initializeWebSocketServer(server, options = {}) {
         socket.join(`host:${hostId}`);
         socket.join('hosts:online');
         hostSocketCounts.set(hostId, (hostSocketCounts.get(hostId) || 0) + 1);
+        if (hostLocation && typeof hostLocation.lat === 'number' && typeof hostLocation.lng === 'number') {
+          hostRegistry.set(hostId, {
+            location: hostLocation,
+            radiusKm: Number(searchRadiusKm) || 5,
+            updatedAt: Date.now()
+          });
+        }
         console.log(`[Socket] Host ${hostId} is online`);
       }
     });
@@ -47,6 +56,7 @@ function initializeWebSocketServer(server, options = {}) {
         const left = (hostSocketCounts.get(hostId) || 1) - 1;
         if (left <= 0) {
           hostSocketCounts.delete(hostId);
+          hostRegistry.delete(hostId);
           console.log(`[Socket] Host ${hostId} is offline`);
         } else {
           hostSocketCounts.set(hostId, left);
@@ -81,8 +91,35 @@ function emitToHostsOnline(event, data) {
   io.to('hosts:online').emit(event, data);
 }
 
+function emitRequestToNearbyHosts(request) {
+  if (!io || !request || !request.location) return;
+
+  for (const [hostId, meta] of hostRegistry.entries()) {
+    if (!meta?.location) continue;
+    const distanceKm = haversineDistance(
+      Number(request.location.lat),
+      Number(request.location.lng),
+      Number(meta.location.lat),
+      Number(meta.location.lng)
+    );
+    const radiusKm = Number(meta.radiusKm) || 5;
+    if (distanceKm <= radiusKm) {
+      emitToHost(hostId, 'new_request', {
+        request: {
+          ...request,
+          distance: Number(distanceKm.toFixed(2))
+        }
+      });
+    }
+  }
+}
+
 function isHostOnline(hostId) {
   return (hostSocketCounts.get(hostId) || 0) > 0;
+}
+
+function getHostMeta(hostId) {
+  return hostRegistry.get(hostId) || null;
 }
 
 module.exports = {
@@ -91,6 +128,8 @@ module.exports = {
   emitToRequest,
   emitToHost,
   emitToHostsOnline,
+  emitRequestToNearbyHosts,
   isHostOnline,
+  getHostMeta,
   getIO: () => io
 };

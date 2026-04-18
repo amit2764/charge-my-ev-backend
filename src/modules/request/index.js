@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, mockMode } = require('../../lib/firestore');
-const { emitToRequest, emitToHostsOnline, isHostOnline } = require('../../realtime');
+const { emitToRequest, emitRequestToNearbyHosts, isHostOnline, getHostMeta } = require('../../realtime');
+const { haversineDistance } = require('../../lib/geohash');
 
 const inMemoryRequests = new Map();
 const inMemoryResponses = new Map();
@@ -12,6 +13,14 @@ function uid(prefix) {
 
 function isExpired(expiryIso) {
   return !expiryIso || new Date(expiryIso).getTime() <= Date.now();
+}
+
+function cleanupExpiredInMemory() {
+  for (const [requestId, request] of inMemoryRequests.entries()) {
+    if (isExpired(request.expiresAt) || request.status !== 'OPEN') {
+      inMemoryRequests.delete(requestId);
+    }
+  }
 }
 
 async function createRequest(req, res) {
@@ -33,12 +42,13 @@ async function createRequest(req, res) {
     };
 
     if (!db || mockMode) {
+      cleanupExpiredInMemory();
       inMemoryRequests.set(id, request);
     } else {
       await db.collection('requests').doc(id).set(request);
     }
 
-    emitToHostsOnline('new_request', { request });
+    emitRequestToNearbyHosts(request);
     return res.json({ success: true, request });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to create request' });
@@ -47,18 +57,50 @@ async function createRequest(req, res) {
 
 async function listPendingRequests(req, res) {
   try {
+    const hostId = req.query.hostId;
+    const hostLat = req.query.hostLat ? Number(req.query.hostLat) : null;
+    const hostLng = req.query.hostLng ? Number(req.query.hostLng) : null;
+    const radiusKm = Number(req.query.radiusKm) || 5;
+
+    if (!hostId && (hostLat == null || hostLng == null)) {
+      return res.status(400).json({ success: false, error: 'hostId or hostLat/hostLng is required' });
+    }
+
     let pending = [];
 
     if (!db || mockMode) {
+      cleanupExpiredInMemory();
       pending = Array.from(inMemoryRequests.values());
     } else {
       const snap = await db.collection('requests').where('status', '==', 'OPEN').limit(50).get();
       pending = snap.docs.map(doc => doc.data());
     }
 
+    let anchorLocation = null;
+    if (hostLat != null && hostLng != null && !Number.isNaN(hostLat) && !Number.isNaN(hostLng)) {
+      anchorLocation = { lat: hostLat, lng: hostLng };
+    } else if (hostId) {
+      const meta = getHostMeta(hostId);
+      anchorLocation = meta?.location || null;
+    }
+
+    if (!anchorLocation) {
+      return res.status(400).json({ success: false, error: 'Host charger location is required' });
+    }
+
     pending = pending
       .filter(r => !isExpired(r.expiresAt))
-      .map(r => ({ ...r, distance: 1.2, rating: 4.9 }))
+      .map(r => {
+        const distance = haversineDistance(
+          Number(anchorLocation.lat),
+          Number(anchorLocation.lng),
+          Number(r.location.lat),
+          Number(r.location.lng)
+        );
+        return { ...r, distance: Number(distance.toFixed(2)), rating: 4.9 };
+      })
+      .filter(r => r.distance <= radiusKm)
+      .sort((a, b) => a.distance - b.distance)
       .slice(0, 20);
 
     return res.json({ success: true, requests: pending });
@@ -89,10 +131,15 @@ async function respondToRequest(req, res) {
       return res.status(404).json({ success: false, error: 'Request not found or closed' });
     }
 
-    if (hostLocation && request.location) {
-      const latDiff = Math.abs(Number(hostLocation.lat) - Number(request.location.lat));
-      const lngDiff = Math.abs(Number(hostLocation.lng) - Number(request.location.lng));
-      if (latDiff > 0.4 || lngDiff > 0.4) {
+    const resolvedHostLocation = hostLocation || getHostMeta(hostId)?.location;
+    if (resolvedHostLocation && request.location) {
+      const distance = haversineDistance(
+        Number(resolvedHostLocation.lat),
+        Number(resolvedHostLocation.lng),
+        Number(request.location.lat),
+        Number(request.location.lng)
+      );
+      if (distance > 5) {
         return res.status(400).json({ success: false, error: 'Host is too far from this request' });
       }
     }
