@@ -1,5 +1,11 @@
 node_modules/
 .env
+*.env
+*.env.local
+*.env.production
 logs/
 .DS_Store
 npm-debug.log
+key.json
+ev-frontend/dist/
+ev-admin/dist/

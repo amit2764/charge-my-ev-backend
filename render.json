@@ -1,0 +1,18 @@
+{
+  "buildCommand": "echo 'Backend runs as Node.js server, no build needed'",
+  "startCommand": "node src/app.js",
+  "envs": [
+    {
+      "key": "NODE_ENV",
+      "value": "production"
+    },
+    {
+      "key": "PORT",
+      "value": "3000"
+    },
+    {
+      "key": "SENTRY_ENVIRONMENT",
+      "value": "production"
+    }
+  ]
+}

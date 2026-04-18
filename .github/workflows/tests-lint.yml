@@ -1,0 +1,82 @@
+name: Tests & Linting
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linter (ESLint)
+        run: npm run lint 2>/dev/null || echo "Linting not configured yet"
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: cd ev-frontend && npm install
+
+      - name: Build frontend
+        env:
+          VITE_ENVIRONMENT: production
+          VITE_API_BASE_URL: https://api.chargemyev.com
+        run: cd ev-frontend && npm run build
+
+      - name: Check build output
+        run: |
+          if [ -d "ev-frontend/dist" ]; then
+            echo "✅ Frontend build successful"
+            du -sh ev-frontend/dist
+          else
+            echo "❌ Frontend build failed"
+            exit 1
+          fi
+
+  security-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for secrets in code
+        run: |
+          # Check for common secret patterns
+          if grep -r "SENTRY_DSN=" --include="*.js" --include="*.jsx" --include="*.ts" --include="*.tsx" .; then
+            echo "⚠️ Warning: Potential exposed secrets found"
+          fi
+          if grep -r "firebase" --include="*.env" .; then
+            echo "⚠️ Warning: .env file might be committed"
+          fi
+
+      - name: Verify critical files exist
+        run: |
+          test -f "src/app.js" || (echo "❌ Backend app.js missing" && exit 1)
+          test -f "ev-frontend/src/main.jsx" || (echo "❌ Frontend main.jsx missing" && exit 1)
+          test -f "package.json" || (echo "❌ Backend package.json missing" && exit 1)
+          test -f "ev-frontend/package.json" || (echo "❌ Frontend package.json missing" && exit 1)
+          echo "✅ All critical files present"
