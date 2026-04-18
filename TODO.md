@@ -11,23 +11,21 @@ Launch Tasks
 
 Integration Checklist
 ---------------------
-- [ ] Configure Firestore (prod) & Auth
-- [ ] Integrate SMS provider (Twilio/AWS SNS) for OTP
-- [ ] Integrate Payment Gateway (Stripe) and host payouts
-- [ ] Integrate Email provider (SendGrid/Mailgun)
-- [ ] Deploy hosting & CI/CD (VPS/Heroku/GitHub Actions)
-- [ ] Add Monitoring & Error Reporting (Sentry/Prometheus)
+- [x] Configure Firestore (prod) & Auth
+- [x] Integrate SMS provider (Fast2SMS) for OTP
+- [x] Complete Payment Gateway (Razorpay) webhooks & payouts
+- [x] Integrate Email provider (SendGrid/Mailgun)
+- [x] Deploy hosting & CI/CD (Render backend + Vercel frontend + GitHub Actions)
+- [x] Add Monitoring & Error Reporting (Sentry/Prometheus)
 - [ ] Setup Logging & Retention (Cloud Logging/ELK)
 - [ ] Background jobs & queue (Redis + Bull / SQS)
 - [ ] Maps & Geolocation (Google Maps / OSM)
-- [ ] WebSockets / Realtime (Socket.io / Pusher)
-- [ ] Push Notifications (FCM / APNs)
 - [ ] KYC / Identity verification for hosts
-- [ ] Analytics (GA / Mixpanel)
+- [x] Cloud Storage for media (Charger images, Profile pics)
 - [ ] Rate limiting & WAF (Cloudflare)
-- [ ] Cloud Storage for media (GCS / S3)
-- [ ] Payment dispute handling & reconciliation
+- [x] Payment dispute handling & reconciliation
 - [ ] Legal templates: Terms, Privacy, Host agreement
+
 
 Notes
 -----

@@ -1,11 +1,17 @@
 const express = require('express');
-const { emitToRequest } = require('../../realtime');
+const { db, mockMode } = require('../../lib/firestore');
+const { emitToRequest, emitToHostsOnline, isHostOnline } = require('../../realtime');
 
-const requests = new Map();
-const responsesByRequest = new Map();
+const inMemoryRequests = new Map();
+const inMemoryResponses = new Map();
+const REQUEST_TTL_MS = 5 * 60 * 1000;
 
 function uid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isExpired(expiryIso) {
+  return !expiryIso || new Date(expiryIso).getTime() <= Date.now();
 }
 
 async function createRequest(req, res) {
@@ -15,15 +21,24 @@ async function createRequest(req, res) {
       return res.status(400).json({ success: false, error: 'userId and valid location are required' });
     }
 
+    const id = uid('req');
     const request = {
-      id: uid('req'),
+      id,
       userId,
       location,
       vehicleType: vehicleType || 'electric',
       status: 'OPEN',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + REQUEST_TTL_MS).toISOString()
     };
-    requests.set(request.id, request);
+
+    if (!db || mockMode) {
+      inMemoryRequests.set(id, request);
+    } else {
+      await db.collection('requests').doc(id).set(request);
+    }
+
+    emitToHostsOnline('new_request', { request });
     return res.json({ success: true, request });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to create request' });
@@ -32,14 +47,20 @@ async function createRequest(req, res) {
 
 async function listPendingRequests(req, res) {
   try {
-    const pending = Array.from(requests.values())
-      .filter(r => r.status === 'OPEN')
-      .map(r => ({
-        ...r,
-        distance: 1.2,
-        rating: 4.9
-      }))
+    let pending = [];
+
+    if (!db || mockMode) {
+      pending = Array.from(inMemoryRequests.values());
+    } else {
+      const snap = await db.collection('requests').where('status', '==', 'OPEN').limit(50).get();
+      pending = snap.docs.map(doc => doc.data());
+    }
+
+    pending = pending
+      .filter(r => !isExpired(r.expiresAt))
+      .map(r => ({ ...r, distance: 1.2, rating: 4.9 }))
       .slice(0, 20);
+
     return res.json({ success: true, requests: pending });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to load pending requests' });
@@ -48,14 +69,32 @@ async function listPendingRequests(req, res) {
 
 async function respondToRequest(req, res) {
   try {
-    const { requestId, hostId, status, price, estimatedArrival } = req.body || {};
+    const { requestId, hostId, status, price, estimatedArrival, hostLocation } = req.body || {};
     if (!requestId || !hostId) {
       return res.status(400).json({ success: false, error: 'requestId and hostId are required' });
     }
+    if (!isHostOnline(hostId)) {
+      return res.status(400).json({ success: false, error: 'Host must be online before responding' });
+    }
 
-    const request = requests.get(requestId);
-    if (!request || request.status !== 'OPEN') {
+    let request = null;
+    if (!db || mockMode) {
+      request = inMemoryRequests.get(requestId);
+    } else {
+      const snap = await db.collection('requests').doc(requestId).get();
+      request = snap.exists ? snap.data() : null;
+    }
+
+    if (!request || request.status !== 'OPEN' || isExpired(request.expiresAt)) {
       return res.status(404).json({ success: false, error: 'Request not found or closed' });
+    }
+
+    if (hostLocation && request.location) {
+      const latDiff = Math.abs(Number(hostLocation.lat) - Number(request.location.lat));
+      const lngDiff = Math.abs(Number(hostLocation.lng) - Number(request.location.lng));
+      if (latDiff > 0.4 || lngDiff > 0.4) {
+        return res.status(400).json({ success: false, error: 'Host is too far from this request' });
+      }
     }
 
     const response = {
@@ -67,12 +106,17 @@ async function respondToRequest(req, res) {
       estimatedArrival: Number(estimatedArrival) || 5,
       address: 'Nearby charging point',
       location: request.location,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 2 * 60 * 1000).toISOString()
     };
 
-    const list = responsesByRequest.get(requestId) || [];
-    list.push(response);
-    responsesByRequest.set(requestId, list);
+    if (!db || mockMode) {
+      const list = inMemoryResponses.get(requestId) || [];
+      list.push(response);
+      inMemoryResponses.set(requestId, list);
+    } else {
+      await db.collection('responses').doc(response.id).set(response);
+    }
 
     emitToRequest(requestId, 'response_update', {
       action: 'added',

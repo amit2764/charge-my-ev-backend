@@ -20,6 +20,7 @@
     "firebase-admin": "^11.11.0",
     "helmet": "^7.0.0",
     "ioredis": "^5.10.1",
+    "libsodium-wrappers": "^0.8.3",
     "multer": "^1.4.5-lts.1",
     "ngeohash": "^0.6.3",
     "razorpay": "^2.9.2",

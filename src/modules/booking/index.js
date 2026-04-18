@@ -2,11 +2,80 @@ const express = require('express');
 const { db, mockMode } = require('../../lib/firestore');
 const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
+const { emitToRequest, emitToUser, emitToHost } = require('../../realtime');
 
 async function createBooking(req, res) {
-  // stub create - in real impl write to Firestore and return booking
-  const booking = { id: 'booking_stub_1', ...req.body };
-  return res.json({ success: true, booking });
+  try {
+    const { userId, hostId, requestId, price } = req.body || {};
+    if (!userId || !hostId || !requestId) {
+      return res.status(400).json({ success: false, error: 'userId, hostId and requestId are required' });
+    }
+
+    const bookingId = `booking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    if (!db || mockMode) {
+      const booking = {
+        id: bookingId,
+        userId,
+        hostId,
+        requestId,
+        price: Number(price) || 5,
+        status: 'CONFIRMED',
+        createdAt: new Date().toISOString()
+      };
+      return res.json({ success: true, booking });
+    }
+
+    let booking = null;
+    await db.runTransaction(async (txn) => {
+      const requestRef = db.collection('requests').doc(requestId);
+      const requestSnap = await txn.get(requestRef);
+      if (!requestSnap.exists) throw new Error('Request not found');
+
+      const requestData = requestSnap.data();
+      if (requestData.status !== 'OPEN') throw new Error('Request is no longer open');
+
+      const responseQuery = await txn.get(
+        db.collection('responses')
+          .where('requestId', '==', requestId)
+          .where('hostId', '==', hostId)
+          .where('status', '==', 'ACCEPTED')
+          .limit(1)
+      );
+      if (responseQuery.empty) throw new Error('Selected host has no active offer for this request');
+
+      booking = {
+        id: bookingId,
+        userId,
+        hostId,
+        requestId,
+        price: Number(price) || 5,
+        status: 'CONFIRMED',
+        createdAt: new Date().toISOString()
+      };
+
+      const bookingRef = db.collection('bookings').doc(bookingId);
+      txn.set(bookingRef, booking);
+      txn.update(requestRef, {
+        status: 'BOOKED',
+        bookedAt: new Date().toISOString(),
+        bookingId,
+        selectedHostId: hostId
+      });
+    });
+
+    await cache.set(`booking:${booking.id}`, booking, 60);
+
+    const payload = { booking };
+    emitToRequest(requestId, 'booking_confirmed', payload);
+    emitToUser(userId, 'booking_confirmed', payload);
+    emitToHost(hostId, 'booking_confirmed', payload);
+
+    return res.json({ success: true, booking });
+  } catch (err) {
+    logger.error('createBooking failed', { err: err.message });
+    return res.status(400).json({ success: false, error: err.message || 'Booking failed' });
+  }
 }
 
 async function getBooking(req, res) {
