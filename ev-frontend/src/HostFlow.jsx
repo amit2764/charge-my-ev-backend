@@ -83,10 +83,22 @@ export default function HostFlow() {
       setElapsedSeconds(0);
     };
 
+    const onPaymentUpdate = ({ bookingId, paymentStatus, payment }) => {
+      setActiveBooking(prev => {
+        if (!prev || prev.id !== bookingId) return prev;
+        return {
+          ...prev,
+          paymentStatus,
+          payment
+        };
+      });
+    };
+
     socket.on('new_request', onNewRequest);
     socket.on('booking_confirmed', onBookingConfirmed);
     socket.on('session_started', onSessionStarted);
     socket.on('session_stopped', onSessionStopped);
+    socket.on('payment_update', onPaymentUpdate);
 
     if (isHostAvailable) {
       socket.emit('subscribe', {
@@ -119,6 +131,7 @@ export default function HostFlow() {
       socket.off('booking_confirmed', onBookingConfirmed);
       socket.off('session_started', onSessionStarted);
       socket.off('session_stopped', onSessionStopped);
+      socket.off('payment_update', onPaymentUpdate);
       socket.disconnect();
     };
   }, [isHostAvailable, activeBooking, user, hostProfile, radiusKm, setActiveBooking]);
@@ -211,6 +224,23 @@ export default function HostFlow() {
     } finally { setLoading(false); }
   };
 
+  const confirmCashReceived = async () => {
+    setLoading(true); setError('');
+    try {
+      const res = await api.post('/api/payment/confirm', {
+        bookingId: activeBooking.id,
+        confirmerId: user,
+        role: 'host',
+        confirmed: true
+      });
+      if (res.data?.booking) {
+        setActiveBooking(res.data.booking);
+      }
+    } catch (err) {
+      setError('Payment confirmation failed: ' + (err.response?.data?.error || err.message));
+    } finally { setLoading(false); }
+  };
+
   // Formatting helpers
   const formatTime = (secs) => {
     const h = Math.floor(secs / 3600).toString().padStart(2, '0');
@@ -279,6 +309,10 @@ export default function HostFlow() {
               <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
               <p className="text-5xl text-green-400 font-black my-6">${activeBooking.finalAmount}</p>
               <p className="text-gray-400 mb-6">{activeBooking.durationMinutes?.toFixed(1)} mins charging</p>
+              <p className="text-xs text-gray-500 mb-4">Payment status: <span className="font-bold text-cyan-400">{activeBooking.paymentStatus || 'PENDING'}</span></p>
+              <Button onClick={confirmCashReceived} disabled={loading || activeBooking.paymentStatus === 'CONFIRMED'}>
+                {activeBooking.paymentStatus === 'CONFIRMED' ? 'Cash Confirmed' : (loading ? 'Confirming...' : 'I Received Cash')}
+              </Button>
               <Button onClick={() => { setActiveBooking(null); setOtpInput(''); }}>Return to Dashboard</Button>
             </>
           )}
