@@ -4,13 +4,16 @@ const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
 const { emitToUser, emitToHost } = require('../../realtime');
 
-// In-memory bookings store for mockMode (mirrors booking module's store)
-// When a booking is created in mockMode it is only in-memory there, so we
-// fetch from cache or allow start even without a PIN (dev convenience).
-const MOCK_BOOKINGS = new Map();
-
 function generatePin() {
   return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+function redactPinsForHost(booking) {
+  return {
+    ...booking,
+    startPin: undefined,
+    stopPin: undefined
+  };
 }
 
 async function getBookingById(bookingId) {
@@ -40,8 +43,8 @@ async function startSession(req, res) {
       const updated = { ...(booking || { id: bookingId }), status: 'STARTED', startTime, stopPin };
       await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
       emitToUser(updated.userId, 'session_started', { booking: updated });
-      emitToHost(updated.hostId, 'session_started', { booking: { ...updated, stopPin: undefined } });
-      return res.json({ success: true, booking: updated });
+      emitToHost(updated.hostId, 'session_started', { booking: redactPinsForHost(updated) });
+      return res.json({ success: true, booking: redactPinsForHost(updated) });
     }
 
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
@@ -69,9 +72,9 @@ async function startSession(req, res) {
 
     // User gets the stopPin to show host later; host only gets the status change
     emitToUser(booking.userId, 'session_started', { booking: updated });
-    emitToHost(booking.hostId, 'session_started', { booking: { ...updated, stopPin: undefined } });
+    emitToHost(booking.hostId, 'session_started', { booking: redactPinsForHost(updated) });
 
-    return res.json({ success: true, booking: updated });
+    return res.json({ success: true, booking: redactPinsForHost(updated) });
   } catch (err) {
     logger.error('startSession failed', { err: err.message });
     return res.status(500).json({ success: false, error: 'Failed to start session: ' + err.message });
@@ -96,8 +99,8 @@ async function stopSession(req, res) {
       const updated = { ...(booking || { id: bookingId }), status: 'COMPLETED', endTime, durationMinutes: Number(durationMinutes.toFixed(2)), finalAmount: Number(finalAmount) };
       await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
       emitToUser(updated.userId, 'session_stopped', { booking: updated, finalAmount: updated.finalAmount });
-      emitToHost(updated.hostId, 'session_stopped', { booking: updated, finalAmount: updated.finalAmount });
-      return res.json({ success: true, booking: updated, finalAmount: updated.finalAmount, durationMinutes: updated.durationMinutes });
+      emitToHost(updated.hostId, 'session_stopped', { booking: redactPinsForHost(updated), finalAmount: updated.finalAmount });
+      return res.json({ success: true, booking: redactPinsForHost(updated), finalAmount: updated.finalAmount, durationMinutes: updated.durationMinutes });
     }
 
     if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
@@ -126,9 +129,9 @@ async function stopSession(req, res) {
     await cache.set(`booking:${bookingId}`, updated, 3600);
 
     emitToUser(booking.userId, 'session_stopped', { booking: updated, finalAmount });
-    emitToHost(booking.hostId, 'session_stopped', { booking: updated, finalAmount });
+    emitToHost(booking.hostId, 'session_stopped', { booking: redactPinsForHost(updated), finalAmount });
 
-    return res.json({ success: true, booking: updated, finalAmount, durationMinutes: Number(durationMinutes.toFixed(2)) });
+    return res.json({ success: true, booking: redactPinsForHost(updated), finalAmount, durationMinutes: Number(durationMinutes.toFixed(2)) });
   } catch (err) {
     logger.error('stopSession failed', { err: err.message });
     return res.status(500).json({ success: false, error: 'Failed to stop session: ' + err.message });

@@ -9,7 +9,6 @@ export default function UserFlow() {
   const [step, setStep] = useState('REQUEST'); // REQUEST, MATCHING, CONFIRM, CHARGING, PAYMENT, RATING
   const [hosts, setHosts] = useState([]);
   const [selectedHost, setSelectedHost] = useState(null);
-  const [otpInput, setOtpInput] = useState('');
   const [acceptedHost, setAcceptedHost] = useState(null); // { hostId, expiresInSeconds, price, estimatedArrival }
   const [acceptanceCountdown, setAcceptanceCountdown] = useState(0);
   
@@ -135,28 +134,6 @@ export default function UserFlow() {
       setStep('CHARGING');
     } catch (err) { 
       setError('Booking failed: ' + (err.response?.data?.error || err.message)); 
-    } finally { setLoading(false); }
-  };
-
-  const startCharging = async () => {
-    setLoading(true); setError('');
-    try {
-      const res = await api.post('/api/start', { bookingId: activeBooking.id, otp: otpInput });
-      setActiveBooking(res.data.booking);
-      setOtpInput('');
-    } catch (err) { 
-      setError(err.response?.data?.error || 'Invalid Start OTP. Please check the code.'); 
-    } finally { setLoading(false); }
-  };
-
-  const stopCharging = async () => {
-    setLoading(true); setError('');
-    try {
-      const res = await api.post('/api/stop', { bookingId: activeBooking.id, otp: otpInput });
-      setActiveBooking({ ...res.data.booking, finalAmount: res.data.finalAmount });
-      setStep('PAYMENT');
-    } catch (err) { 
-      setError(err.response?.data?.error || 'Invalid Stop OTP. Please check the code.'); 
     } finally { setLoading(false); }
   };
 
