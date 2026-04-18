@@ -1,6 +1,7 @@
 const { db } = require('./config/firebase');
 const admin = require('firebase-admin');
 const axios = require('axios'); // Ensure axios is in your package.json
+const { sendEmail } = require('./email');
 
 /**
  * Firestore Schema:
@@ -34,39 +35,25 @@ function generateOTP() {
  * @returns {boolean} True if valid format
  */
 function validatePhone(phone) {
-  // Basic phone validation: 10-15 digits, may start with +
+  if (!phone || typeof phone !== 'string') return false;
+  const normalizedPhone = phone.trim().replace(/\s+/g, '');
   const phoneRegex = /^\+?[1-9]\d{9,14}$/;
-  const isValid = phoneRegex.test(phone);
-  console.log(`Validating phone ${phone}: ${isValid}`);
+  const isValid = phoneRegex.test(normalizedPhone);
+  console.log(`Validating phone "${phone}" => "${normalizedPhone}": ${isValid}`);
   return isValid;
 }
 
 /**
- * Helper to dispatch SMS via Fast2SMS
+ * Helper to dispatch SMS via Firebase Phone Authentication
+ * Note: Firebase Phone Auth is typically client-side. For server-side OTP,
+ * consider using Firebase Cloud Functions or a different SMS provider.
  */
-async function sendSmsViaFast2SMS(phone, otp) {
-  // API Key is physically hardcoded here:
-  const smsApiKey = 'ilx3esPUayHkBRj9pcvq26ZmSCowEdXVgKtFNWAO0rIJMnGL7zoLZaAOuepzyKUqTmYjNRw70bHEWD4g';
-  if (!smsApiKey) return;
-  
-  try {
-    const response = await axios.get('https://www.fast2sms.com/dev/bulkV2', {
-      params: {
-        authorization: smsApiKey,
-        variables_values: otp,
-        route: 'otp',
-        numbers: phone.replace(/\D/g, '').slice(-10)
-      }
-    });
-    
-    if (!response.data.return) {
-      console.warn('SMS Gateway warning:', response.data.message);
-    } else {
-      console.log(`[PROD] SMS actually sent to ${phone}`); 
-    }
-  } catch (smsError) {
-    console.error('Failed to send SMS via provider:', smsError.response?.data || smsError.message);
-  }
+async function sendSmsViaFirebase(phone, otp) {
+  // Firebase Admin SDK doesn't send SMS directly - that's client-side
+  // For production, implement Firebase Phone Auth in the frontend
+  console.log(`[FIREBASE MOCK] Firebase Phone Auth not implemented server-side. OTP for ${phone} is: ${otp}`);
+  console.log(`[INFO] Implement Firebase Phone Authentication in frontend for real SMS delivery`);
+  return;
 }
 
 /**
@@ -76,6 +63,8 @@ async function sendSmsViaFast2SMS(phone, otp) {
  */
 async function sendOTP(phone) {
   try {
+    phone = typeof phone === 'string' ? phone.trim().replace(/\s+/g, '') : phone;
+
     // Validate phone number
     if (!validatePhone(phone)) {
       return {
@@ -115,8 +104,8 @@ async function sendOTP(phone) {
 
       console.log(`[DEV] Generated OTP for ${phone}: ${otp}`);
       
-      // Always try to send SMS
-      await sendSmsViaFast2SMS(phone, otp);
+      // Attempt to send real SMS via Firebase (currently mock)
+      await sendSmsViaFirebase(phone, otp);
 
       return {
         success: true,
@@ -144,8 +133,8 @@ async function sendOTP(phone) {
 
       console.log(`MOCK OTP for ${phone}: ${otp}`);
       
-      // Force SMS to send even if Firebase fails and we are in mock mode
-      await sendSmsViaFast2SMS(phone, otp);
+      // Attempt to send real SMS via Firebase even in mock mode
+      await sendSmsViaFirebase(phone, otp);
 
       return {
         success: true,
@@ -171,6 +160,8 @@ async function sendOTP(phone) {
  */
 async function verifyOTP(phone, otp) {
   try {
+    phone = typeof phone === 'string' ? phone.trim().replace(/\s+/g, '') : phone;
+
     // Validate inputs
     if (!validatePhone(phone)) {
       return {
@@ -222,12 +213,22 @@ async function verifyOTP(phone, otp) {
 
       // Verify OTP
       if (otpData.otp === otp) {
+        const userRef = db.collection('users').doc(phone);
+        const userDoc = await userRef.get();
+        const isFirstVerification = userDoc.exists && !userDoc.data().verified;
+
         // OTP correct - mark user as verified and delete OTP
-        await db.collection('users').doc(phone).update({
+        await userRef.update({
           verified: true
         });
 
         await otpRef.delete();
+
+        // If this is the first time they are verifying, send a welcome email.
+        // NOTE: This assumes a placeholder email. In a real app, you'd collect the user's email.
+        if (isFirstVerification) {
+          sendEmail(phone + '@example.com', 'Welcome to EV P2P Charging!', 'Your account is now verified.', '<h1>Welcome!</h1><p>Your account is now verified and ready to use.</p>');
+        }
 
         return {
           success: true,
@@ -272,9 +273,14 @@ async function verifyOTP(phone, otp) {
 
       if (otpData.otp === otp) {
         const user = mockUsers.get(phone);
-        if (user) {
+        const isFirstVerification = user && !user.verified;
+
+        if (isFirstVerification) {
           user.verified = true;
+          // Send welcome email in mock mode
+          sendEmail(phone + '@example.com', 'Welcome to EV P2P Charging!', 'Your account is now verified.', '<h1>Welcome!</h1><p>Your account is now verified and ready to use.</p>');
         }
+
         mockOTPs.delete(phone);
         return {
           success: true,

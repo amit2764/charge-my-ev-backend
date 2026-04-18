@@ -4,7 +4,6 @@
  */
 
 const { db, mockMode } = require('./config/firebase');
-const { stopCharging } = require('./booking');
 const { notifyOTPRequired, notifySessionStarted, notifySessionStopped } = require('./notifications');
 const { trackSessionIssue } = require('./monitoring');
 
@@ -568,6 +567,7 @@ async function sendDurationWarnings() {
 async function performSessionHealthCheck() {
   try {
     const report = {
+      success: true,
       timestamp: new Date().toISOString(),
       activeSessions: 0,
       sessionsNeedingStop: 0,
@@ -628,7 +628,16 @@ async function performSessionHealthCheck() {
 
   } catch (error) {
     console.error('Error in session health check:', error);
+    
+    // Add helpful hint for Firebase NOT_FOUND error
+    if (error.message && error.message.includes('NOT_FOUND')) {
+      console.warn('\n⚠️ FIREBASE CONNECTION FAILED (5 NOT_FOUND):');
+      console.warn('1. Ensure you created a Firestore database in the Firebase Console (and it is named `(default)`).');
+      console.warn('2. Check that your FIREBASE_PRIVATE_KEY in Render is formatted correctly. Newlines can cause issues.\n');
+    }
+
     return {
+      success: false,
       timestamp: new Date().toISOString(),
       error: error.message,
       activeSessions: 0,

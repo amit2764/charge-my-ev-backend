@@ -2,55 +2,182 @@ import { useState, useEffect } from 'react';
 import api from './api';
 import { useStore } from './store';
 import { Button, Card, Input } from './components';
+import HostOnboarding from './HostOnboarding';
 
 export default function HostFlow() {
-  const { user } = useStore();
+  const { user, hostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking } = useStore();
   const [requests, setRequests] = useState([]);
   const [price, setPrice] = useState('5.00');
+  
+  // Live Session State
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [otpInput, setOtpInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // Mock fetching active requests (In reality, use Socket.io to listen for 'NEW_REQUEST')
   useEffect(() => {
-    // For demo purposes, we will mock an incoming request
-    setTimeout(() => {
-      setRequests([{ id: 'req_demo', vehicleType: 'electric', location: { lat: 37.7, lng: -122.4 } }]);
-    }, 3000);
-  }, []);
+    if (hostProfile && price === '5.00') setPrice(hostProfile.pricePerHour);
+  }, [hostProfile]);
+
+  // Live Timer Effect for Host
+  useEffect(() => {
+    let interval;
+    if (activeBooking?.status === 'STARTED' && activeBooking?.startTime) {
+      interval = setInterval(() => {
+        const start = new Date(activeBooking.startTime).getTime();
+        setElapsedSeconds(Math.floor((Date.now() - start) / 1000));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeBooking]);
+
+  // Poll for requests ONLY if available and no active booking
+  useEffect(() => {
+    let poll;
+    if (isHostAvailable && !activeBooking) {
+      poll = setInterval(() => {
+        // Fetch real pending requests from the backend
+        api.get('/api/requests/pending')
+          .then(res => {
+            if (res.data && res.data.requests) {
+              setRequests(res.data.requests);
+            }
+          }).catch(err => console.log('Polling for real requests...'));
+      }, 4000);
+    }
+    if (!isHostAvailable) setRequests([]); // Clear requests if offline
+    return () => clearInterval(poll);
+  }, [isHostAvailable, activeBooking, requests.length]);
 
   const acceptRequest = async (reqId) => {
+    setLoading(true); setError('');
     try {
       await api.post('/api/respond', { requestId: reqId, hostId: user, status: 'ACCEPTED', price: parseFloat(price), estimatedArrival: 5 });
-      alert('Offer sent to driver!');
-      setRequests(requests.filter(r => r.id !== reqId));
+      
+      // In a real app, we wait for the user to confirm the booking via socket.
+      // For UI demonstration, we will auto-transition to a mock booking state.
+      setActiveBooking({
+        id: `booking_${Date.now()}`,
+        status: 'BOOKED',
+        price: parseFloat(price),
+        userId: 'Driver_9921'
+      });
+      setRequests([]);
     } catch (err) { 
-      alert('Failed to send offer: ' + (err.response?.data?.error || err.message)); 
-    }
+      setError('Failed to send offer: ' + (err.response?.data?.error || err.message)); 
+    } finally { setLoading(false); }
   };
+
+  const startSession = async () => {
+    setLoading(true); setError('');
+    try {
+      const res = await api.post('/api/start', { bookingId: activeBooking.id, otp: otpInput });
+      setActiveBooking(res.data.booking);
+      setOtpInput('');
+    } catch (err) { 
+      setError(err.response?.data?.error || 'Invalid Start OTP. Please check the code.'); 
+    } finally { setLoading(false); }
+  };
+
+  const stopSession = async () => {
+    setLoading(true); setError('');
+    try {
+      const res = await api.post('/api/stop', { bookingId: activeBooking.id, otp: otpInput });
+      setActiveBooking({ ...activeBooking, status: 'COMPLETED', finalAmount: res.data.finalAmount });
+      setElapsedSeconds(0);
+    } catch (err) { 
+      setError(err.response?.data?.error || 'Invalid Stop OTP. Please check the code.'); 
+    } finally { setLoading(false); }
+  };
+
+  // Formatting helpers
+  const formatTime = (secs) => {
+    const h = Math.floor(secs / 3600).toString().padStart(2, '0');
+    const m = Math.floor((secs % 3600) / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+  const currentEarnings = activeBooking?.price ? ((elapsedSeconds / 3600) * activeBooking.price).toFixed(2) : '0.00';
+
+  if (!hostProfile) return <HostOnboarding />;
+
+  if (activeBooking) {
+    return (
+      <div className="p-4 pb-28 space-y-4">
+        <h2 className="text-2xl font-bold text-white">Active Charging Session</h2>
+        {error && <div className="p-3 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg animate-pulse">{error}</div>}
+        
+        <Card className="text-center py-8">
+          <p className="text-sm text-gray-400 mb-4">Vehicle: <span className="text-white font-bold">{activeBooking.userId}</span></p>
+          
+          {activeBooking.status === 'BOOKED' ? (
+            <>
+              <p className="text-xs text-gray-500 mb-2">Driver is arriving. Ask them for the Start OTP.</p>
+              <Input placeholder="Enter Start OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono mb-4" />
+              <Button onClick={startSession} disabled={loading}>{loading ? 'Verifying...' : 'Verify & Start Charge'}</Button>
+            </>
+          ) : activeBooking.status === 'COMPLETED' ? (
+            <>
+              <div className="my-6">
+                <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
+                <p className="text-5xl text-green-400 font-black mb-4">${activeBooking.finalAmount}</p>
+              </div>
+              <Button onClick={() => setActiveBooking(null)}>Return to Dashboard</Button>
+            </>
+          ) : (
+            <>
+              <div className="my-6">
+                <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Current Earnings</p>
+                <p className="text-5xl text-green-400 font-black mb-4">${currentEarnings}</p>
+                <p className="text-3xl font-mono text-white mb-2">{formatTime(elapsedSeconds)}</p>
+              </div>
+              <p className="text-xs text-gray-500 mb-2">Ask driver for End OTP to finish.</p>
+              <Input placeholder="Enter End OTP" value={otpInput} onChange={e => setOtpInput(e.target.value)} className="text-center text-3xl tracking-widest font-mono mb-4" />
+              <Button variant="danger" onClick={stopSession} disabled={loading}>{loading ? 'Stopping...' : 'Verify & Stop Charge'}</Button>
+            </>
+          )}
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 pb-28">
+      {error && <div className="p-3 mb-4 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg animate-pulse">{error}</div>}
+
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white">Host Dashboard</h2>
-        <p className="text-gray-400">Your charger is currently <span className="text-cyan-400 font-bold">Online</span></p>
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-2xl font-bold text-white">Host Dashboard</h2>
+          <button 
+            onClick={() => setIsHostAvailable(!isHostAvailable)} 
+            className={`px-4 py-2 rounded-full font-bold text-sm transition-all ${isHostAvailable ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-gray-800 text-gray-400'}`}
+          >
+            {isHostAvailable ? 'ONLINE' : 'OFFLINE'}
+          </button>
+        </div>
+        <p className="text-gray-400 text-sm">Toggle online to receive charging requests.</p>
       </div>
 
       <h3 className="font-bold text-white mb-3">Incoming Requests</h3>
-      {requests.length === 0 ? (
-        <Card className="text-center py-10 text-gray-500">No requests nearby right now.</Card>
+      {!isHostAvailable ? (
+        <Card className="text-center py-10 text-gray-500">You are currently offline.</Card>
+      ) : requests.length === 0 ? (
+        <Card className="text-center py-10 text-gray-500 animate-pulse">Scanning for nearby drivers...</Card>
       ) : (
         requests.map(req => (
           <Card key={req.id} className="mb-4">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <p className="font-bold capitalize text-white">{req.vehicleType} EV</p>
-                <p className="text-sm text-gray-400">2.5 km away</p>
+                <p className="text-sm text-gray-400">{req.distance} km away • ⭐ {req.rating}</p>
               </div>
             </div>
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <span className="absolute left-3.5 top-3.5 text-gray-400">$</span>
-                <Input type="number" value={price} onChange={e => setPrice(e.target.value)} className="pl-8 mb-0" />
+                <Input type="number" step="0.50" value={price} onChange={e => setPrice(e.target.value)} className="pl-8 mb-0" />
               </div>
-              <Button onClick={() => acceptRequest(req.id)} className="w-auto px-6">Offer Charge</Button>
+              <Button onClick={() => acceptRequest(req.id)} disabled={loading} className="w-auto px-6">{loading ? 'Sending...' : 'Offer Charge'}</Button>
             </div>
           </Card>
         ))

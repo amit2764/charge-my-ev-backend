@@ -5,7 +5,6 @@
  */
 
 const { db, mockMode } = require('./config/firebase');
-const { stopCharging } = require('./booking');
 const { performSessionHealthCheck, SESSION_CONFIG } = require('./session-manager');
 const redis = require('./lib/redis');
 
@@ -103,6 +102,7 @@ async function autoStopBooking(bookingId, booking) {
     console.log(`[AUTO-STOP] Booking: userId=${booking.userId}, duration=${getElapsedHours(booking.startTime).toFixed(2)}h`);
 
     // Use the endOtp to stop (required by stopCharging function)
+    const { stopCharging } = require('./booking');
     const result = await stopCharging(bookingId, booking.endOtp);
 
     if (result.success) {
@@ -153,8 +153,10 @@ async function runAutoStopCheck() {
       };
     }
 
-    // Log health check results
-    console.log(`[AUTO-STOP] Health check: ${healthReport.activeSessions} active, ${healthReport.sessionsNeedingStop} need stop, ${healthReport.warningsSent} warnings sent`);
+    // Log health check results only if there's something to report
+    if (healthReport.activeSessions > 0 || healthReport.sessionsNeedingStop > 0 || healthReport.warningsSent > 0) {
+      console.log(`[AUTO-STOP] Health check: ${healthReport.activeSessions} active, ${healthReport.sessionsNeedingStop} need stop, ${healthReport.warningsSent} warnings sent`);
+    }
 
     // Additional legacy check for bookings that might not be in session states
     const bookings = await getStartedBookings();

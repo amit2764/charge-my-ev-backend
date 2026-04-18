@@ -5,8 +5,9 @@ dotenv.config();
 
 function validatePhone(phone) {
   if (!phone || typeof phone !== 'string') return false;
+  const normalizedPhone = phone.trim().replace(/\s+/g, '');
   const phoneRegex = /^\+?[1-9]\d{9,14}$/;
-  return phoneRegex.test(phone);
+  return phoneRegex.test(normalizedPhone);
 }
 
 function validateLocation(location) {

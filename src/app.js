@@ -5,10 +5,20 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const Sentry = require('@sentry/node');
-const { ProfilingIntegration } = require('@sentry/profiling-node');
-const { initializeWebSocketServer } = require('./realtime');
-const { sendOTP, verifyOTP, isUserVerified, validatePhone, ensureVerifiedUser } = require('./auth');
+
+let ProfilingIntegration = null;
+try {
+  ProfilingIntegration = require('@sentry/profiling-node').ProfilingIntegration;
+} catch (e) {
+  console.warn('⚠️ Sentry profiling disabled locally (Windows binary missing)');
+}
+
+const { initializeWebSocketServer, emitToRequest, emitToUser } = require('./realtime');
+// NOTE: OTP handling moved to Firebase Phone Auth on frontend
+// Backend only handles user session/profile after Firebase auth succeeds
+const { isUserVerified, validatePhone, ensureVerifiedUser } = require('./auth');
 const { createChargingRequest, getChargingRequest } = require('./charging');
+const { uploadImage } = require('./storage');
 const { getNearbyChargers } = require('./matching');
 const { createHostResponse, getResponsesForRequest } = require('./responses');
 const { createBooking, startCharging, stopCharging } = require('./booking');
@@ -26,21 +36,29 @@ const {
 } = require('./notifications');
 const { performSessionHealthCheck, getSessionState } = require('./session-manager');
 const { initializeCashPayment, confirmPayment, getPaymentStatus } = require('./cash-payment');
-const { createPaymentOrder, verifyPaymentSignature } = require('./online-payment');
-const { requireAdmin } = require('./security');
+const { createPaymentOrder, verifyPaymentSignature, processWebhook } = require('./online-payment');
+const { emailQueue, initializeWorkers } = require('./jobs');
+const { sendReceiptEmail } = require('./email');
+const multer = require('multer');
+const { requireAdmin, validateUserId } = require('./security');
 
 dotenv.config();
 
 const app = express();
 
+const sentryIntegrations = [
+  new Sentry.Integrations.Http({ tracing: true }),
+  new Sentry.Integrations.Express({ app })
+];
+
+if (ProfilingIntegration) {
+  sentryIntegrations.push(new ProfilingIntegration());
+}
+
 // Initialize Sentry as early as possible
 Sentry.init({
   dsn: process.env.SENTRY_DSN, // Add this to your .env file
-  integrations: [
-    new Sentry.Integrations.Http({ tracing: true }),
-    new Sentry.Integrations.Express({ app }),
-    new ProfilingIntegration(),
-  ],
+  integrations: sentryIntegrations,
   tracesSampleRate: 1.0,
   profilesSampleRate: 1.0,
 });
@@ -51,8 +69,26 @@ app.use(Sentry.Handlers.tracingHandler());
 const allowedOrigin = process.env.CORS_ORIGIN || '*';
 app.use(helmet());
 app.use(cors({ origin: allowedOrigin, optionsSuccessStatus: 200 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString(); // Save raw body for webhook verification
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
+
+// Multer configuration for in-memory storage
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB file size limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not an image! Please upload an image file.'), false);
+    }
+  },
+});
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -65,16 +101,8 @@ const generalLimiter = rateLimit({
   }
 });
 
-const otpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: 'OTP request limit exceeded. Try again in 15 minutes.'
-  }
-});
+// OTP limiter removed: OTP handling moved to Firebase client-side auth
+// Firebase provides its own rate limiting for phone auth
 
 app.use(generalLimiter);
 
@@ -85,69 +113,56 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API endpoint to send OTP
-app.post('/api/auth/send-otp', otpLimiter, async (req, res) => {
-  try {
-    const { phone } = req.body;
+// ========== AUTHENTICATION ARCHITECTURE ==========
+// OTP/Phone Auth Flow:
+// 1. Frontend: User enters phone number
+// 2. Frontend: Firebase sends OTP via SMS directly
+// 3. Frontend: User enters OTP
+// 4. Frontend: Firebase Phone Auth verifies OTP → Firebase Auth session created
+// 5. Backend: Receives Firebase ID token from frontend for subsequent requests
+// 6. Backend: User profile/session management only (NOT OTP handling)
+//
+// Backend OTP endpoints (DEPRECATED & DISABLED):
+// These endpoints are NO LONGER USED. Phone authentication is now
+// handled entirely by Firebase on the frontend using RecaptchaVerifier.
+// This eliminates the need for:
+// - SMS provider subscriptions (Fast2SMS, Twilio, etc.)
+// - Backend OTP generation/validation logic
+// - OTP database/cache management
+// ================================================
 
-    if (!validatePhone(phone)) {
+// API endpoint for user registration/profile after Firebase auth
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { firebaseUid, phone, name } = req.body;
+    
+    if (!firebaseUid || !phone) {
       return res.status(400).json({
         success: false,
-        error: 'Valid phone number is required'
+        error: 'Firebase UID and phone number are required'
       });
     }
 
-    const result = await sendOTP(phone);
+    // TODO: Create/update user profile in Firestore
+    // This is optional - can be called after successful Firebase Phone Auth
 
-    if (result.success) {
-      res.status(200).json(result);
-    } else {
-      res.status(400).json(result);
-    }
-
+    res.status(200).json({
+      success: true,
+      message: 'User registered successfully'
+    });
   } catch (error) {
-    console.error('Send OTP endpoint error:', error);
+    console.error('Registration error:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Failed to register user'
     });
   }
 });
 
-// API endpoint to verify OTP
-app.post('/api/auth/verify-otp', async (req, res) => {
-  try {
-    const { phone, otp } = req.body;
-
-    // Validate request body
-    if (!phone || !otp) {
-      return res.status(400).json({
-        success: false,
-        error: 'Phone number and OTP are required'
-      });
-    }
-
-    // Call verifyOTP function
-    const result = await verifyOTP(phone, otp);
-
-    if (result.success) {
-      res.status(200).json(result);
-    } else {
-      // Track OTP verification failure
-      await trackOtpError(phone, 'N/A', 'VERIFICATION_FAILED', result.error);
-      res.status(400).json(result);
-    }
-
-  } catch (error) {
-    console.error('Verify OTP endpoint error:', error);
-    // Track OTP system error
-    await trackOtpError(phone || 'unknown', 'N/A', 'SYSTEM_ERROR', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-});
+// OLD DEPRECATED ENDPOINTS (kept for reference, commented out):
+// app.post('/api/auth/send-otp', ...) 
+// app.post('/api/auth/verify-otp', ...)
+// These are NO LONGER USED - Firebase handles OTP on the frontend
 
 // API endpoint to create charging request
 app.post('/api/request', async (req, res) => {
@@ -297,6 +312,9 @@ app.post('/api/respond', async (req, res) => {
     const result = await createHostResponse(requestId, hostId, responseData);
 
     if (result.success) {
+      // Emit real-time update to the frontend via WebSockets
+      emitToRequest(requestId, 'response_update', { action: 'added', response: result.response });
+
       // If response is accepted, notify the user who made the request
       if (responseData.status && responseData.status.toUpperCase() === 'ACCEPTED') {
         // Get request details to find userId
@@ -373,6 +391,10 @@ app.post('/api/book', async (req, res) => {
     const result = await createBooking(userId, hostId, chargerId, price, requestId);
 
     if (result.success) {
+      // Notify clients watching this request that it has been booked
+      emitToRequest(requestId, 'booking_update', { status: 'CONFIRMED', booking: result.booking });
+      emitToUser(hostId, 'new_booking', result.booking);
+
       res.status(201).json(result);
     } else {
       // Track booking failure
@@ -408,6 +430,9 @@ app.post('/api/start', async (req, res) => {
     const result = await startCharging(bookingId, otp);
 
     if (result.success) {
+      // Push real-time status update to both host and user
+      emitToUser(result.booking.userId, 'session_update', { status: 'CHARGING', booking: result.booking });
+      
       // Notify user that session has started
       notifySessionStarted(bookingId, result.booking.userId, result.booking.startTime)
         .catch(error => {
@@ -458,6 +483,18 @@ app.post('/api/stop', async (req, res) => {
     const result = await stopCharging(bookingId, otp);
 
     if (result.success) {
+      // Push real-time status update
+      emitToUser(result.booking.userId, 'session_update', { status: 'COMPLETED', booking: result.booking });
+
+      // Queue a background job to send the email receipt
+      const targetEmail = req.body.email || result.booking.userEmail;
+      if (targetEmail && emailQueue) {
+        emailQueue.add({ toEmail: targetEmail, bookingDetails: result.booking });
+      } else if (targetEmail) {
+        // Fallback for when Redis isn't configured
+        sendReceiptEmail(targetEmail, result.booking).catch(err => console.error('Fallback email receipt error:', err));
+      }
+
       // Notify user that session has stopped
       notifySessionStopped(bookingId, result.booking.userId, {
         finalAmount: result.finalAmount,
@@ -941,62 +978,6 @@ app.get('/api/trust-score/admin/all', requireAdmin, async (req, res) => {
 
 // =============== CASH PAYMENT ENDPOINTS ===============
 
-// API endpoint to confirm cash payment
-app.post('/api/payment/confirm', async (req, res) => {
-  try {
-    const { bookingId, confirmed, notes } = req.body;
-    const { userId } = req; // From auth middleware
-
-    if (!bookingId || confirmed === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'bookingId and confirmed are required'
-      });
-    }
-
-    // Get booking to determine if user is user or host
-    let booking = null;
-    if (mockMode) {
-      // In mock mode, assume user is the one making the request
-      booking = { userId, hostId: 'mock_host' };
-    } else {
-      const bookingDoc = await db.collection('bookings').doc(bookingId).get();
-      if (!bookingDoc.exists) {
-        return res.status(404).json({
-          success: false,
-          error: 'Booking not found'
-        });
-      }
-      booking = bookingDoc.data();
-    }
-
-    let role = 'user';
-    if (booking.hostId === userId) {
-      role = 'host';
-    } else if (booking.userId !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Unauthorized: You are not part of this booking'
-      });
-    }
-
-    const result = await confirmPayment(bookingId, userId, role, confirmed, notes);
-
-    if (result.success) {
-      res.status(200).json(result);
-    } else {
-      res.status(400).json(result);
-    }
-
-  } catch (error) {
-    console.error('Confirm payment endpoint error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to confirm payment'
-    });
-  }
-});
-
 // API endpoint to get payment status
 app.get('/api/payment/:bookingId/status', async (req, res) => {
   try {
@@ -1206,44 +1187,6 @@ app.get('/api/admin/monitoring/alerts', requireAdmin, async (req, res) => {
   }
 });
 
-// API endpoint to confirm cash payment
-app.post('/api/payment/confirm', async (req, res) => {
-  try {
-    const { bookingId, confirmerId, role, confirmed, notes } = req.body;
-
-    // Validate request body
-    if (!bookingId || !confirmerId || !role) {
-      return res.status(400).json({
-        success: false,
-        error: 'bookingId, confirmerId, and role are required'
-      });
-    }
-
-    if (!['user', 'host'].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Role must be either "user" or "host"'
-      });
-    }
-
-    // Call confirmPayment function
-    const result = await confirmPayment(bookingId, confirmerId, role, confirmed, notes);
-
-    if (result.success) {
-      res.status(200).json(result);
-    } else {
-      res.status(400).json(result);
-    }
-
-  } catch (error) {
-    console.error('Confirm payment endpoint error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-});
-
 // =============== ONLINE PAYMENT ENDPOINTS ===============
 
 // API endpoint to create a Razorpay order
@@ -1287,6 +1230,51 @@ app.post('/api/payment/online/verify', async (req, res) => {
   } catch (error) {
     console.error('Verify payment endpoint error:', error);
     res.status(500).json({ success: false, error: 'Failed to verify payment' });
+  }
+});
+
+// API endpoint for Razorpay webhooks
+app.post('/api/payment/online/webhook', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    if (!signature || !req.rawBody) {
+      return res.status(400).send('Missing signature or body');
+    }
+    
+    const result = await processWebhook(req.rawBody, signature);
+    
+    // Always return 200 OK to Razorpay to prevent them from retrying
+    if (result.success) {
+      res.status(200).send('OK');
+    } else {
+      res.status(400).send(result.error);
+    }
+  } catch (error) {
+    console.error('Webhook endpoint error:', error);
+    res.status(500).send('Internal Error');
+  }
+});
+
+// API endpoint for uploading an image
+app.post('/api/upload/image', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No image file provided.' });
+    }
+
+    // The 'image' field in the form-data is the file
+    // The destination path can be dynamic, e.g., based on user ID or type
+    const destination = req.body.type === 'profile' ? 'profile_pictures/' : 'charger_images/';
+    const publicUrl = await uploadImage(req.file, destination);
+
+    res.status(200).json({
+      success: true,
+      message: 'Image uploaded successfully',
+      url: publicUrl,
+    });
+  } catch (error) {
+    console.error('Image upload endpoint error:', error);
+    res.status(500).json({ success: false, error: 'Failed to upload image.' });
   }
 });
 
@@ -1378,6 +1366,9 @@ app.use(Sentry.Handlers.errorHandler());
 
 // Initialize WebSocket server
 initializeWebSocketServer(server);
+
+// Initialize background job workers
+initializeWorkers();
 
 // General error handler middleware for API failures
 app.use(async (err, req, res, next) => {

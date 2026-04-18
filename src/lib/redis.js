@@ -5,9 +5,16 @@ dotenv.config();
 
 let redis = null;
 
-if (process.env.REDIS_URL && !process.env.REDIS_URL.includes('your_upstash_endpoint')) {
+const redisUrl = process.env.REDIS_URL;
+const isInvalidUrl = !redisUrl || 
+                     redisUrl.includes('your_upstash_endpoint') || 
+                     redisUrl.includes('YOUR_ACTUAL_PASSWORD') || 
+                     redisUrl.includes('YOUR_ENDPOINT') ||
+                     redisUrl.endsWith('PORT');
+
+if (!isInvalidUrl) {
   try {
-    redis = new Redis(process.env.REDIS_URL, {
+    redis = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
         // Exponential backoff with a max of 2 seconds

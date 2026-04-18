@@ -1,54 +1,81 @@
 const admin = require('firebase-admin');
-const dotenv = require('dotenv');
 
-dotenv.config();
+let db = null;
+let mockMode = true;
 
-// Support either raw private key or base64-encoded private key to avoid newline issues in env
-const firebasePrivateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
-const firebasePrivateKeyB64 = process.env.FIREBASE_PRIVATE_KEY_B64;
+function parseServiceAccountFromEnv() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+  const privateKeyB64 = process.env.FIREBASE_PRIVATE_KEY_B64;
 
-let resolvedPrivateKey;
-if (firebasePrivateKeyRaw) {
-  resolvedPrivateKey = firebasePrivateKeyRaw.replace(/\\n/g, '\n');
-} else if (firebasePrivateKeyB64) {
+  if (projectId && clientEmail && privateKeyRaw) {
+    return {
+      project_id: projectId,
+      client_email: clientEmail,
+      private_key: privateKeyRaw.replace(/\\n/g, '\n')
+    };
+  }
+
+  if (privateKeyB64) {
+    try {
+      const decoded = JSON.parse(Buffer.from(privateKeyB64, 'base64').toString('utf8'));
+      if (decoded.project_id && decoded.client_email && decoded.private_key) {
+        return decoded;
+      }
+    } catch (e) {
+      console.warn('FIREBASE_PRIVATE_KEY_B64 is not valid base64 JSON.');
+    }
+  }
+
+  return null;
+}
+
+function parseServiceAccountFromFile() {
   try {
-    resolvedPrivateKey = Buffer.from(firebasePrivateKeyB64, 'base64').toString('utf8');
-  } catch (err) {
-    console.warn('Failed to decode FIREBASE_PRIVATE_KEY_B64:', err.message);
+    return require('../../key.json');
+  } catch (e) {
+    return null;
   }
 }
 
-// Check if Firebase credentials are properly configured
-const hasValidCredentials = Boolean(
-  process.env.FIREBASE_PROJECT_ID &&
-  process.env.FIREBASE_CLIENT_EMAIL &&
-  resolvedPrivateKey &&
-  !resolvedPrivateKey.includes('your_private_key')
-);
+try {
+  const envServiceAccount = parseServiceAccountFromEnv();
+  const fileServiceAccount = parseServiceAccountFromFile();
+  const serviceAccount = envServiceAccount || fileServiceAccount;
 
-let db = null;
-const mockMode = !hasValidCredentials;
-
-if (hasValidCredentials) {
-  try {
-    const serviceAccount = {
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: resolvedPrivateKey,
-    };
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-
-    db = admin.firestore();
-    console.log('Firebase initialized successfully');
-  } catch (error) {
-    console.warn('Firebase initialization failed:', error.message);
-    console.warn('Running in mock mode - set FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY in .env');
+  if (!serviceAccount) {
+    throw new Error('No Firebase credentials found in env vars or key.json');
   }
-} else {
-  console.warn('Firebase credentials not configured - running in mock mode');
+
+  const projectId = serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    throw new Error('Firebase project ID is missing');
+  }
+
+  console.log('Initializing Firebase Admin...');
+  console.log(`- Project ID: ${projectId}`);
+  console.log(`- Credentials source: ${envServiceAccount ? 'environment variables' : 'key.json'}`);
+
+  if (admin.apps.length === 0) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId,
+      databaseURL: `https://${projectId}.firebaseio.com`,
+      storageBucket: `${projectId}.appspot.com`
+    });
+  }
+
+  db = admin.firestore();
+  db.settings({ databaseId: 'default' });
+
+  mockMode = false;
+  console.log('Firestore initialized successfully.');
+} catch (error) {
+  console.warn('--- Firebase Initialization Failed ---');
+  console.warn(error.message);
+  console.warn('Application will run in MOCK MODE.');
+  console.warn('------------------------------------');
 }
 
 module.exports = { admin, db, mockMode };

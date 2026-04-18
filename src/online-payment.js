@@ -6,6 +6,7 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { db, mockMode } = require('./config/firebase');
+const { sendEmail } = require('./email');
 
 // Initialize Razorpay only if keys are present
 let razorpayInstance = null;
@@ -83,11 +84,22 @@ async function verifyPaymentSignature(bookingId, razorpayOrderId, razorpayPaymen
       paidAt: new Date()
     });
 
+    const bookingRef = db.collection('bookings').doc(bookingId);
     // Update booking status
-    await db.collection('bookings').doc(bookingId).update({
+    await bookingRef.update({
       status: 'PAID',
       updatedAt: new Date()
     });
+
+    // Send receipt email
+    const paymentDoc = await db.collection('online_payments').doc(bookingId).get();
+    const bookingDoc = await bookingRef.get();
+    if (paymentDoc.exists && bookingDoc.exists) {
+      const userPhone = bookingDoc.data().userId; // Assuming userId is the phone number
+      const amount = paymentDoc.data().amount;
+      // NOTE: Using a placeholder email address. In a real app, you'd collect the user's email.
+      sendEmail(userPhone + '@example.com', `Your Payment Receipt for Booking #${bookingId.slice(-6)}`, `Thank you for your payment of INR ${amount}.`, `<h1>Payment Successful</h1><p>Thank you for your payment of INR ${amount} for booking ${bookingId}.</p>`);
+    }
 
     return { success: true, message: 'Payment verified successfully' };
   } catch (error) {
@@ -96,7 +108,79 @@ async function verifyPaymentSignature(bookingId, razorpayOrderId, razorpayPaymen
   }
 }
 
+/**
+ * Processes incoming Razorpay webhooks
+ * @param {string} rawBody 
+ * @param {string} signature 
+ */
+async function processWebhook(rawBody, signature) {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) return { success: false, error: 'Webhook secret not configured' };
+
+  try {
+    // Generate HMAC SHA256 signature using the raw body and your webhook secret
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      return { success: false, error: 'Invalid webhook signature' };
+    }
+
+    const payload = JSON.parse(rawBody);
+    const event = payload.event;
+
+    // Process successful payment
+    if (event === 'payment.captured') {
+      const payment = payload.payload.payment.entity;
+      const orderId = payment.order_id;
+      
+      // Find the payment intent in Firestore
+      const snapshot = await db.collection('online_payments')
+        .where('orderId', '==', orderId)
+        .limit(1)
+        .get();
+
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        const bookingId = doc.data().bookingId;
+
+        // Mark payment as paid via webhook
+        await doc.ref.update({
+          status: 'PAID',
+          paymentId: payment.id,
+          webhookCapturedAt: new Date()
+        });
+
+        // Mark the actual booking as paid
+        const bookingRef = db.collection('bookings').doc(bookingId);
+        await bookingRef.update({
+          status: 'PAID',
+          updatedAt: new Date()
+        });
+        
+        // Send receipt email
+        const bookingDoc = await bookingRef.get();
+        if (bookingDoc.exists) {
+          const userPhone = bookingDoc.data().userId;
+          // NOTE: Using a placeholder email address. In a real app, you'd collect the user's email.
+          sendEmail(userPhone + '@example.com', `Your Payment Receipt for Booking #${bookingId.slice(-6)}`, `Thank you for your payment of INR ${payment.amount / 100}.`, `<h1>Payment Successful</h1><p>Thank you for your payment of INR ${payment.amount / 100} for booking ${bookingId}.</p>`);
+        }
+
+        return { success: true, message: 'Payment captured via webhook successfully' };
+      }
+    }
+    
+    return { success: true, message: `Webhook received but ignored event: ${event}` };
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    return { success: false, error: 'Internal webhook processing error' };
+  }
+}
+
 module.exports = {
   createPaymentOrder,
-  verifyPaymentSignature
+  verifyPaymentSignature,
+  processWebhook
 };
