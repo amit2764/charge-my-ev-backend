@@ -6,9 +6,10 @@ import { Button, Card, Input } from './components';
 import HostOnboarding from './HostOnboarding';
 
 export default function HostFlow() {
-  const { user, hostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking } = useStore();
+  const { user, hostProfile, setHostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking } = useStore();
   const [requests, setRequests] = useState([]);
   const [price, setPrice] = useState('5.00');
+  const [radiusKm, setRadiusKm] = useState('5');
   
   // Live Session State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -54,11 +55,22 @@ export default function HostFlow() {
     socket.on('booking_confirmed', onBookingConfirmed);
 
     if (isHostAvailable) {
-      socket.emit('subscribe', { hostId: user });
+      socket.emit('subscribe', {
+        hostId: user,
+        hostLocation: hostProfile?.location || null,
+        searchRadiusKm: Number(radiusKm) || 5
+      });
 
       // Bootstrap pending requests once when going online.
       if (!activeBooking) {
-        api.get('/api/requests/pending')
+        const params = new URLSearchParams({
+          hostId: user,
+          hostLat: String(hostProfile?.location?.lat || ''),
+          hostLng: String(hostProfile?.location?.lng || ''),
+          radiusKm: String(Number(radiusKm) || 5)
+        });
+
+        api.get(`/api/requests/pending?${params.toString()}`)
           .then(res => {
             if (res.data && res.data.requests) setRequests(res.data.requests);
           })
@@ -73,7 +85,44 @@ export default function HostFlow() {
       socket.off('booking_confirmed', onBookingConfirmed);
       socket.disconnect();
     };
-  }, [isHostAvailable, activeBooking, user, setActiveBooking]);
+  }, [isHostAvailable, activeBooking, user, hostProfile, radiusKm, setActiveBooking]);
+
+  const updateChargerLocation = () => {
+    if (!('geolocation' in navigator)) {
+      setError('Geolocation is not supported by this device/browser.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const next = {
+          ...(hostProfile || {}),
+          location: {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          }
+        };
+        setHostProfile(next);
+        setLoading(false);
+      },
+      () => {
+        setError('Could not fetch charger location. Please enable GPS permissions.');
+        setLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const toggleAvailability = () => {
+    if (!isHostAvailable && !hostProfile?.location) {
+      setError('Set charger location first before going ONLINE.');
+      return;
+    }
+    setError('');
+    setIsHostAvailable(!isHostAvailable);
+  };
 
   const acceptRequest = async (reqId) => {
     setLoading(true); setError('');
@@ -172,13 +221,31 @@ export default function HostFlow() {
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-2xl font-bold text-white">Host Dashboard</h2>
           <button 
-            onClick={() => setIsHostAvailable(!isHostAvailable)} 
+            onClick={toggleAvailability} 
             className={`px-4 py-2 rounded-full font-bold text-sm transition-all ${isHostAvailable ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'bg-gray-800 text-gray-400'}`}
           >
             {isHostAvailable ? 'ONLINE' : 'OFFLINE'}
           </button>
         </div>
-        <p className="text-gray-400 text-sm">Toggle online to receive charging requests.</p>
+        <p className="text-gray-400 text-sm">Set charger location once, then go online to receive nearby requests.</p>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+          <Button variant="outline" className="py-2" onClick={updateChargerLocation} disabled={loading}>
+            {loading ? 'Updating...' : '📍 Update Charger Location'}
+          </Button>
+          <Input
+            label="Match Radius (km)"
+            type="number"
+            value={radiusKm}
+            onChange={e => setRadiusKm(e.target.value)}
+            className="mb-0"
+          />
+          <Input
+            label="Charger GPS"
+            value={hostProfile?.location ? `${hostProfile.location.lat.toFixed(4)}, ${hostProfile.location.lng.toFixed(4)}` : 'Not set'}
+            disabled
+            className="mb-0"
+          />
+        </div>
       </div>
 
       <h3 className="font-bold text-white mb-3">Incoming Requests</h3>
