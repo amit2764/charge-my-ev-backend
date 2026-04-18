@@ -92,6 +92,11 @@ export default function UserFlow() {
           payment
         };
       });
+
+      // Move to rating only after full payment confirmation is complete.
+      if (paymentStatus === 'CONFIRMED') {
+        setStep('RATING');
+      }
     });
 
     return () => {
@@ -156,9 +161,14 @@ export default function UserFlow() {
       if (res.data?.booking) {
         setActiveBooking(res.data.booking);
       }
-      setStep('RATING');
-    } catch (err) { 
-      setError('Payment failed: ' + (err.response?.data?.error || err.message)); 
+
+      // For cash flow, host also confirms receipt. Stay on payment screen until CONFIRMED.
+      const status = res.data?.booking?.paymentStatus || res.data?.payment?.status;
+      if (status === 'CONFIRMED') {
+        setStep('RATING');
+      }
+    } catch (err) {
+      setError('Payment failed: ' + (err.response?.data?.error || err.message));
     } finally { setLoading(false); }
   };
 
@@ -310,9 +320,14 @@ export default function UserFlow() {
           <Card>
             <p className="text-5xl font-black text-white my-6">${activeBooking.finalAmount}</p>
             <p className="text-gray-400 mb-6">Duration: {activeBooking.durationMinutes?.toFixed(1)} mins</p>
-            <p className="text-xs text-gray-500 mb-4">Payment status: <span className="font-bold text-cyan-400">{activeBooking.paymentStatus || 'PENDING'}</span></p>
-            <Button onClick={payCash} disabled={loading}>{loading ? 'Processing...' : 'I Paid Cash'}</Button>
-            <Button variant="outline" className="mt-3">Pay Online (Soon)</Button>
+            <p className="text-xs text-gray-500 mb-2">Payment status: <span className="font-bold text-cyan-400">{activeBooking.paymentStatus || 'PENDING'}</span></p>
+            {activeBooking.paymentStatus !== 'CONFIRMED' && (
+              <p className="text-xs text-gray-500 mb-4">Cash payment requires both confirmations. Waiting for host once you confirm.</p>
+            )}
+            <Button onClick={payCash} disabled={loading || activeBooking.payment?.userConfirmed || activeBooking.paymentStatus === 'CONFIRMED'}>
+              {loading ? 'Processing...' : (activeBooking.payment?.userConfirmed ? 'Cash Marked Paid' : 'I Paid Cash')}
+            </Button>
+            <Button variant="outline" className="mt-3" disabled>Pay Online (Soon)</Button>
           </Card>
         </div>
       )}
