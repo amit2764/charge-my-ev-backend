@@ -1,4 +1,4 @@
-name: Deploy Backend to Render
+name: Deploy Backend to Railway
 
 on:
   push:
@@ -17,18 +17,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Trigger Render Deployment
-        run: |
-          curl --request POST \
-            --url ${{ secrets.RENDER_DEPLOY_WEBHOOK }} \
-            --header 'Content-Type: application/json'
-        if: secrets.RENDER_DEPLOY_WEBHOOK != ''
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+        run: railway up --project $RAILWAY_PROJECT_ID --service $RAILWAY_SERVICE_ID --environment production --detach
+        if: secrets.RAILWAY_TOKEN != '' && secrets.RAILWAY_PROJECT_ID != '' && secrets.RAILWAY_SERVICE_ID != ''
 
       - name: Notify on Deploy
         if: success()
         run: |
-          echo "✅ Backend deployment triggered to Render"
-          echo "Monitor at: https://dashboard.render.com"
+          echo "✅ Backend deployment triggered to Railway"
+          echo "Monitor at: https://railway.com/project/${{ secrets.RAILWAY_PROJECT_ID }}/service/${{ secrets.RAILWAY_SERVICE_ID }}"
 
       - name: Deploy Failed Notification
         if: failure()
