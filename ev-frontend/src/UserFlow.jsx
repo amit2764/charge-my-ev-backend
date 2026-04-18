@@ -10,6 +10,8 @@ export default function UserFlow() {
   const [hosts, setHosts] = useState([]);
   const [selectedHost, setSelectedHost] = useState(null);
   const [otpInput, setOtpInput] = useState('');
+  const [acceptedHost, setAcceptedHost] = useState(null); // { hostId, expiresInSeconds, price, estimatedArrival }
+  const [acceptanceCountdown, setAcceptanceCountdown] = useState(0);
   
   // Live Charging Timer State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -18,7 +20,24 @@ export default function UserFlow() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Live Timer Effect
+  // Acceptance countdown timer (30 seconds for user to confirm)
+  useEffect(() => {
+    let interval;
+    if (acceptedHost && acceptanceCountdown > 0) {
+      interval = setInterval(() => {
+        setAcceptanceCountdown(prev => {
+          if (prev <= 1) {
+            setAcceptedHost(null); // Request expires, back to finding hosts
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [acceptedHost, acceptanceCountdown]);
+
+  // Live Charging Timer Effect
   useEffect(() => {
     let interval;
     if (step === 'CHARGING' && activeBooking?.status === 'STARTED' && activeBooking?.startTime) {
@@ -32,6 +51,7 @@ export default function UserFlow() {
 
   useEffect(() => {
     socket.connect();
+    
     socket.on('response_update', (data) => {
       if (data.action === 'added' || data.action === 'modified') {
         setHosts(prev => {
@@ -40,7 +60,23 @@ export default function UserFlow() {
         });
       }
     });
-    return () => socket.disconnect();
+
+    // Listen to request_accepted event (first host accepted = Uber-style lock)
+    socket.on('request_accepted', (data) => {
+      setAcceptedHost({
+        hostId: data.hostId,
+        expiresInSeconds: 30,
+        price: data.price,
+        estimatedArrival: data.estimatedArrival
+      });
+      setAcceptanceCountdown(30);
+    });
+
+    return () => {
+      socket.off('response_update');
+      socket.off('request_accepted');
+      socket.disconnect();
+    };
   }, []);
 
   const handleSearchHosts = () => {
@@ -157,19 +193,43 @@ export default function UserFlow() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-white">Available Hosts</h2>
-            <button onClick={() => setStep('REQUEST')} className="text-cyan-400 text-sm">Cancel</button>
+            <button onClick={() => { setStep('REQUEST'); setAcceptedHost(null); setHosts([]); }} className="text-cyan-400 text-sm">Cancel</button>
           </div>
-          {hosts.length === 0 ? <p className="text-gray-500 text-center py-10 animate-pulse">Broadcasting your request to nearby hosts...</p> : null}
-          {hosts.map(h => (
-            <Card key={h.id} className="flex justify-between items-center">
-              <div>
-                <p className="font-bold text-lg text-white">${h.price}/hr</p>
-                <p className="text-sm text-gray-400">{h.distance || '1.2'} km away • ETA: {h.estimatedArrival} mins • ⭐ 4.9</p>
-                {h.address && <p className="text-xs text-gray-500 mt-1">📍 {h.address} {h.landmark ? `(${h.landmark})` : ''}</p>}
+
+          {/* Show accepted host at the top (first-responder like Uber) */}
+          {acceptedHost && acceptanceCountdown > 0 && (
+            <Card className="border-2 border-yellow-500 bg-yellow-900/20">
+              <div className="text-center mb-4">
+                <p className="text-yellow-400 font-bold text-sm">✓ OFFER LOCKED - Confirm within {acceptanceCountdown}s</p>
+                <p className="text-xs text-yellow-300 mt-1">First host to accept your request</p>
               </div>
-              <Button onClick={() => selectHost(h)} className="w-auto px-6 py-2">Select</Button>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-lg text-white">${acceptedHost.price}/hr</p>
+                  <p className="text-sm text-gray-400">Locked • ETA: {acceptedHost.estimatedArrival} mins • ⭐ 4.9</p>
+                </div>
+                <Button onClick={() => selectHost({ ...acceptedHost, hostId: acceptedHost.hostId })} className="w-auto px-6 py-2 bg-yellow-600 hover:bg-yellow-700">Confirm Now</Button>
+              </div>
             </Card>
-          ))}
+          )}
+
+          {hosts.length === 0 && !acceptedHost ? <p className="text-gray-500 text-center py-10 animate-pulse">Broadcasting your request to nearby hosts...</p> : null}
+          {hosts.length === 0 && acceptedHost && acceptanceCountdown <= 0 ? <p className="text-gray-500 text-center py-10 animate-pulse">Offer expired. Broadcasting your request to nearby hosts...</p> : null}
+
+          {/* Show all hosts, but accepted one should already be selected if user confirmed */}
+          {hosts
+            .filter(h => !acceptedHost || h.hostId !== acceptedHost.hostId) // Don't duplicate accepted host
+            .slice(0, 10)
+            .map(h => (
+              <Card key={h.id} className="flex justify-between items-center opacity-75">
+                <div>
+                  <p className="font-bold text-lg text-white">${h.price}/hr</p>
+                  <p className="text-sm text-gray-400">{h.distance || '1.2'} km away • ETA: {h.estimatedArrival} mins • ⭐ 4.9</p>
+                  {h.address && <p className="text-xs text-gray-500 mt-1">📍 {h.address} {h.landmark ? `(${h.landmark})` : ''}</p>}
+                </div>
+                <Button onClick={() => selectHost(h)} className="w-auto px-6 py-2" disabled={!!acceptedHost && acceptanceCountdown > 0}>Select</Button>
+              </Card>
+            ))}
         </div>
       )}
 

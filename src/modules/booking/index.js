@@ -33,7 +33,16 @@ async function createBooking(req, res) {
       if (!requestSnap.exists) throw new Error('Request not found');
 
       const requestData = requestSnap.data();
-      if (requestData.status !== 'OPEN') throw new Error('Request is no longer open');
+
+      // ============ KEY LOGIC: Only the accepted host can confirm booking (like Uber) ============
+      if (requestData.status === 'RESPONDING' && requestData.acceptedBy && requestData.acceptedBy !== hostId) {
+        throw new Error('This offer has been superseded by another host. Please try another request.');
+      }
+
+      // Allow OPEN status for backward compatibility, but RESPONDING requires acceptedBy match
+      if (requestData.status !== 'OPEN' && requestData.status !== 'RESPONDING') {
+        throw new Error('Request is no longer available for booking');
+      }
 
       const responseQuery = await txn.get(
         db.collection('responses')
@@ -74,7 +83,8 @@ async function createBooking(req, res) {
     return res.json({ success: true, booking });
   } catch (err) {
     logger.error('createBooking failed', { err: err.message });
-    return res.status(400).json({ success: false, error: err.message || 'Booking failed' });
+    const status = err.message?.includes('superseded') ? 409 : 400;
+    return res.status(status).json({ success: false, error: err.message || 'Booking failed' });
   }
 }
 

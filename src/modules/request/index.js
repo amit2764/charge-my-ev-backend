@@ -6,6 +6,7 @@ const { haversineDistance } = require('../../lib/geohash');
 const inMemoryRequests = new Map();
 const inMemoryResponses = new Map();
 const REQUEST_TTL_MS = 5 * 60 * 1000;
+const ACCEPTANCE_TTL_MS = 30 * 1000; // 30 seconds for user to confirm booking
 
 function uid(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -13,6 +14,16 @@ function uid(prefix) {
 
 function isExpired(expiryIso) {
   return !expiryIso || new Date(expiryIso).getTime() <= Date.now();
+}
+
+// If a host accepted but user didn't confirm within 30s, revert request to OPEN
+function resetExpiredAcceptances(requestData) {
+  if (requestData.acceptedBy && requestData.acceptanceExpiresAt && isExpired(requestData.acceptanceExpiresAt)) {
+    requestData.status = 'OPEN';
+    requestData.acceptedBy = null;
+    requestData.acceptanceExpiresAt = null;
+  }
+  return requestData;
 }
 
 function cleanupExpiredInMemory() {
@@ -120,15 +131,33 @@ async function respondToRequest(req, res) {
     }
 
     let request = null;
+    let requestRef = null;
+
     if (!db || mockMode) {
       request = inMemoryRequests.get(requestId);
+      if (request) {
+        request = resetExpiredAcceptances(request);
+      }
     } else {
-      const snap = await db.collection('requests').doc(requestId).get();
+      requestRef = db.collection('requests').doc(requestId);
+      const snap = await requestRef.get();
       request = snap.exists ? snap.data() : null;
+      if (request) {
+        request = resetExpiredAcceptances(request);
+      }
     }
 
-    if (!request || request.status !== 'OPEN' || isExpired(request.expiresAt)) {
-      return res.status(404).json({ success: false, error: 'Request not found or closed' });
+    if (!request || isExpired(request.expiresAt)) {
+      return res.status(404).json({ success: false, error: 'Request not found or expired' });
+    }
+
+    // ============ KEY LOGIC: First-responder locking (like Uber) ============
+    if (request.status === 'RESPONDING' && request.acceptedBy && request.acceptedBy !== hostId) {
+      return res.status(409).json({ success: false, error: 'This request was already accepted by another host. Please try another one.' });
+    }
+
+    if (request.status !== 'OPEN' && request.status !== 'RESPONDING') {
+      return res.status(400).json({ success: false, error: 'Request is no longer available' });
     }
 
     const resolvedHostLocation = hostLocation || getHostMeta(hostId)?.location;
@@ -140,10 +169,11 @@ async function respondToRequest(req, res) {
         Number(request.location.lng)
       );
       if (distance > 5) {
-        return res.status(400).json({ success: false, error: 'Host is too far from this request' });
+        return res.status(400).json({ success: false, error: 'Host is too far from this request (must be within 5km)' });
       }
     }
 
+    // Create response record
     const response = {
       id: uid('resp'),
       requestId,
@@ -158,21 +188,53 @@ async function respondToRequest(req, res) {
     };
 
     if (!db || mockMode) {
+      // Update request to RESPONDING + lock to this host
+      request.status = 'RESPONDING';
+      request.acceptedBy = hostId;
+      request.acceptanceExpiresAt = new Date(Date.now() + ACCEPTANCE_TTL_MS).toISOString();
+      inMemoryRequests.set(requestId, request);
+
+      // Save response
       const list = inMemoryResponses.get(requestId) || [];
       list.push(response);
       inMemoryResponses.set(requestId, list);
     } else {
-      await db.collection('responses').doc(response.id).set(response);
+      // Firestore transaction: atomically update request and create response
+      await db.runTransaction(async (txn) => {
+        const currentSnap = await txn.get(requestRef);
+        const current = currentSnap.data();
+        if (current.status === 'RESPONDING' && current.acceptedBy && current.acceptedBy !== hostId) {
+          throw new Error('Another host already accepted this request');
+        }
+
+        // Lock request to this host
+        txn.update(requestRef, {
+          status: 'RESPONDING',
+          acceptedBy: hostId,
+          acceptanceExpiresAt: new Date(Date.now() + ACCEPTANCE_TTL_MS).toISOString()
+        });
+
+        // Create response
+        txn.set(db.collection('responses').doc(response.id), response);
+      });
     }
 
-    emitToRequest(requestId, 'response_update', {
-      action: 'added',
-      response
+    // Emit to user and other hosts that this request is now taken
+    emitToRequest(requestId, 'request_accepted', {
+      requestId,
+      hostId,
+      acceptedAt: new Date().toISOString(),
+      expiresInSeconds: 30,
+      price: Number(price) || 5,
+      estimatedArrival: Number(estimatedArrival) || 5
     });
 
     return res.json({ success: true, response });
   } catch (error) {
-    return res.status(500).json({ success: false, error: 'Failed to send response' });
+    if (error.message.includes('Another host already accepted')) {
+      return res.status(409).json({ success: false, error: 'This request was already accepted by another host' });
+    }
+    return res.status(500).json({ success: false, error: 'Failed to send response: ' + error.message });
   }
 }
 

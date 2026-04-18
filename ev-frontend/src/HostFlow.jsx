@@ -10,6 +10,8 @@ export default function HostFlow() {
   const [requests, setRequests] = useState([]);
   const [price, setPrice] = useState('5.00');
   const [radiusKm, setRadiusKm] = useState('5');
+  const [acceptedRequestId, setAcceptedRequestId] = useState(null); // Track which request we accepted
+  const [acceptanceCountdown, setAcceptanceCountdown] = useState(0);
   
   // Live Session State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -20,6 +22,23 @@ export default function HostFlow() {
   useEffect(() => {
     if (hostProfile && price === '5.00') setPrice(hostProfile.pricePerHour);
   }, [hostProfile]);
+
+  // Acceptance countdown timer - shows how long user has to confirm
+  useEffect(() => {
+    let interval;
+    if (acceptedRequestId && acceptanceCountdown > 0) {
+      interval = setInterval(() => {
+        setAcceptanceCountdown(prev => {
+          if (prev <= 1) {
+            setAcceptedRequestId(null); // Offer expired, can accept more requests
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [acceptedRequestId, acceptanceCountdown]);
 
   // Live Timer Effect for Host
   useEffect(() => {
@@ -135,8 +154,21 @@ export default function HostFlow() {
         estimatedArrival: 5,
         hostLocation: hostProfile?.location || null
       });
-    } catch (err) { 
-      setError('Failed to send offer: ' + (err.response?.data?.error || err.message)); 
+      // Success - lock this request until user confirms or 30s expires
+      setAcceptedRequestId(reqId);
+      setAcceptanceCountdown(30);
+      // Remove this request from the list
+      setRequests(prev => prev.filter(r => r.id !== reqId));
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || err.message;
+      if (err.response?.status === 409) {
+        // Another host got there first
+        setError('⚡ Another host already accepted this request. Keep searching for more!');
+        // Remove this request from the list
+        setRequests(prev => prev.filter(r => r.id !== reqId));
+      } else {
+        setError('Failed to send offer: ' + errorMsg);
+      }
     } finally { setLoading(false); }
   };
 
@@ -249,6 +281,19 @@ export default function HostFlow() {
       </div>
 
       <h3 className="font-bold text-white mb-3">Incoming Requests</h3>
+
+      {/* Show accepted request status (waiting for user to confirm) */}
+      {acceptedRequestId && acceptanceCountdown > 0 && (
+        <Card className="mb-4 border-2 border-green-500 bg-green-900/20">
+          <div className="text-center mb-3">
+            <p className="text-green-400 font-bold">✓ OFFER SENT - Waiting for user confirmation</p>
+            <p className="text-2xl text-white font-bold mt-2">{acceptanceCountdown}s</p>
+            <p className="text-xs text-green-300 mt-1">User has {acceptanceCountdown} seconds to confirm</p>
+          </div>
+          <p className="text-sm text-gray-400 text-center">You can accept other requests while waiting...</p>
+        </Card>
+      )}
+
       {!isHostAvailable ? (
         <Card className="text-center py-10 text-gray-500">You are currently offline.</Card>
       ) : requests.length === 0 ? (
@@ -267,7 +312,13 @@ export default function HostFlow() {
                 <span className="absolute left-3.5 top-3.5 text-gray-400">$</span>
                 <Input type="number" step="0.50" value={price} onChange={e => setPrice(e.target.value)} className="pl-8 mb-0" />
               </div>
-              <Button onClick={() => acceptRequest(req.id)} disabled={loading} className="w-auto px-6">{loading ? 'Sending...' : 'Offer Charge'}</Button>
+              <Button 
+                onClick={() => acceptRequest(req.id)} 
+                disabled={loading || (acceptedRequestId && acceptanceCountdown > 0)} 
+                className="w-auto px-6"
+              >
+                {loading ? 'Sending...' : 'Offer Charge'}
+              </Button>
             </div>
           </Card>
         ))
