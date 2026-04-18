@@ -4,6 +4,19 @@ import { socket } from './socket';
 import { useStore } from './store';
 import { Button, Card, Input } from './components';
 import HostOnboarding from './HostOnboarding';
+import './FlowVisuals.css';
+
+const HOST_FLOW_STEPS = ['Online', 'PIN', 'Charging', 'Payment', 'Done'];
+
+function getHostFlowIndex(activeBooking, isHostAvailable) {
+  if (!isHostAvailable && !activeBooking) return 0;
+  if (!activeBooking) return 0;
+  if (activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') return 1;
+  if (activeBooking.status === 'STARTED') return 2;
+  if (activeBooking.status === 'COMPLETED' && activeBooking.paymentStatus !== 'CONFIRMED') return 3;
+  if (activeBooking.status === 'COMPLETED' && activeBooking.paymentStatus === 'CONFIRMED') return 4;
+  return 0;
+}
 
 export default function HostFlow() {
   const { user, hostProfile, setHostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking } = useStore();
@@ -18,6 +31,7 @@ export default function HostFlow() {
   const [otpInput, setOtpInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const hostFlowIndex = getHostFlowIndex(activeBooking, isHostAvailable);
 
   useEffect(() => {
     if (hostProfile && price === '5.00') setPrice(hostProfile.pricePerHour);
@@ -135,6 +149,44 @@ export default function HostFlow() {
       socket.disconnect();
     };
   }, [isHostAvailable, activeBooking, user, hostProfile, radiusKm, setActiveBooking]);
+
+  // Fallback polling for payment status after session completion.
+  useEffect(() => {
+    if (!activeBooking?.id || activeBooking?.status !== 'COMPLETED' || activeBooking?.paymentStatus === 'CONFIRMED') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const pollPaymentStatus = async () => {
+      try {
+        const res = await api.get(`/api/payment/${activeBooking.id}/status`);
+        if (cancelled) return;
+        const paymentStatus = res.data?.paymentStatus;
+        const payment = res.data?.payment;
+        if (!paymentStatus) return;
+
+        setActiveBooking(prev => {
+          if (!prev || prev.id !== activeBooking.id) return prev;
+          return {
+            ...prev,
+            paymentStatus,
+            payment: payment || prev.payment
+          };
+        });
+      } catch {
+        // Keep retrying silently.
+      }
+    };
+
+    pollPaymentStatus();
+    const interval = setInterval(pollPaymentStatus, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeBooking?.id, activeBooking?.status, activeBooking?.paymentStatus, setActiveBooking]);
 
   const updateChargerLocation = () => {
     if (!('geolocation' in navigator)) {
@@ -254,16 +306,30 @@ export default function HostFlow() {
 
   if (activeBooking) {
     return (
-      <div className="p-4 pb-28 space-y-4">
+      <div className="p-4 pb-28 space-y-4 flow-shell">
+        <div className="flow-rail">
+          {HOST_FLOW_STEPS.map((label, index) => (
+            <div
+              key={label}
+              className={`flow-pill ${index < hostFlowIndex ? 'done' : ''} ${index === hostFlowIndex ? 'active' : ''}`}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
         <h2 className="text-2xl font-bold text-white">Active Charging Session</h2>
         {error && <div className="p-3 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg animate-pulse">{error}</div>}
         
-        <Card className="text-center py-8">
+        <Card className="tesla-panel text-center py-8">
           <p className="text-sm text-gray-400 mb-6">User: <span className="text-white font-bold">{activeBooking.userId?.slice(-6)}</span></p>
           
           {/* ===== CONFIRMED: waiting for user to arrive, host enters Start PIN ===== */}
           {(activeBooking.status === 'BOOKED' || activeBooking.status === 'CONFIRMED') && (
             <>
+              <div className="tesla-status mx-auto mb-4">
+                <span className="status-dot" />
+                Waiting for start PIN
+              </div>
               <p className="text-sm text-gray-300 mb-1">Ask the user to show their <span className="text-cyan-400 font-bold">Start PIN</span> on their phone.</p>
               <p className="text-xs text-gray-500 mb-5">Type the 4-digit code shown on their screen</p>
               <Input
@@ -282,7 +348,13 @@ export default function HostFlow() {
           {/* ===== STARTED: charging running ===== */}
           {activeBooking.status === 'STARTED' && (
             <>
-              <p className="text-xs text-green-400 uppercase tracking-widest mb-4">⚡ Charging In Progress</p>
+              <p className="text-xs text-green-300 uppercase tracking-widest mb-3">Charging In Progress</p>
+              <div className="battery-wrap">
+                <div className="battery" style={{ '--battery-level': `${Math.min(96, 20 + Math.floor(elapsedSeconds / 15))}%` }}>
+                  <div className="battery-fill" />
+                  <div className="battery-glow" />
+                </div>
+              </div>
               <div className="my-4">
                 <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Current Earnings</p>
                 <p className="text-5xl text-green-400 font-black mb-2">${currentEarnings}</p>
@@ -309,11 +381,27 @@ export default function HostFlow() {
               <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
               <p className="text-5xl text-green-400 font-black my-6">${activeBooking.finalAmount}</p>
               <p className="text-gray-400 mb-6">{activeBooking.durationMinutes?.toFixed(1)} mins charging</p>
-              <p className="text-xs text-gray-500 mb-4">Payment status: <span className="font-bold text-cyan-400">{activeBooking.paymentStatus || 'PENDING'}</span></p>
+              <div className="payment-checklist mb-5">
+                <div className="payment-row">
+                  <span className="text-sm text-gray-200">User marked paid</span>
+                  <span className={`state ${activeBooking.payment?.userConfirmed ? 'done' : 'pending'}`}>
+                    {activeBooking.payment?.userConfirmed ? 'Done' : 'Pending'}
+                  </span>
+                </div>
+                <div className="payment-row">
+                  <span className="text-sm text-gray-200">Host marked received</span>
+                  <span className={`state ${activeBooking.payment?.hostConfirmed ? 'done' : 'pending'}`}>
+                    {activeBooking.payment?.hostConfirmed ? 'Done' : 'Pending'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">Payment status: <span className="font-bold text-cyan-300">{activeBooking.paymentStatus || 'PENDING'}</span></p>
               <Button onClick={confirmCashReceived} disabled={loading || activeBooking.paymentStatus === 'CONFIRMED'}>
                 {activeBooking.paymentStatus === 'CONFIRMED' ? 'Cash Confirmed' : (loading ? 'Confirming...' : 'I Received Cash')}
               </Button>
-              <Button onClick={() => { setActiveBooking(null); setOtpInput(''); }}>Return to Dashboard</Button>
+              {activeBooking.paymentStatus === 'CONFIRMED' && (
+                <Button onClick={() => { setActiveBooking(null); setOtpInput(''); }}>Return to Dashboard</Button>
+              )}
             </>
           )}
         </Card>

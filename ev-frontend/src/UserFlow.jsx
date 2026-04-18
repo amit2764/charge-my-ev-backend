@@ -3,6 +3,17 @@ import api from './api';
 import { socket } from './socket';
 import { useStore } from './store';
 import { Button, Card, Input } from './components';
+import './FlowVisuals.css';
+
+const FLOW_STEPS = ['Request', 'PIN', 'Charging', 'Payment', 'Done'];
+
+function getFlowIndex(step, booking) {
+  if (step === 'RATING') return 4;
+  if (step === 'PAYMENT') return 3;
+  if (step === 'CHARGING' && booking?.status === 'STARTED') return 2;
+  if (step === 'CHARGING') return 1;
+  return 0;
+}
 
 export default function UserFlow() {
   const { user, userProfile, activeRequest, setActiveRequest, activeBooking, setActiveBooking } = useStore();
@@ -18,6 +29,7 @@ export default function UserFlow() {
   const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const flowIndex = getFlowIndex(step, activeBooking);
 
   // Acceptance countdown timer (30 seconds for user to confirm)
   useEffect(() => {
@@ -79,7 +91,12 @@ export default function UserFlow() {
 
     // Host verified the stop PIN → session completed
     socket.on('session_stopped', ({ booking, finalAmount }) => {
-      setActiveBooking({ ...booking, finalAmount });
+      setActiveBooking({
+        ...booking,
+        finalAmount,
+        paymentStatus: booking.paymentStatus || 'PENDING',
+        payment: booking.payment || { userConfirmed: false, hostConfirmed: false, status: 'PENDING' }
+      });
       setStep('PAYMENT');
     });
 
@@ -108,6 +125,48 @@ export default function UserFlow() {
       socket.disconnect();
     };
   }, []);
+
+  // Fallback sync for payment state in case socket event is missed.
+  useEffect(() => {
+    if (step !== 'PAYMENT' || !activeBooking?.id || activeBooking?.paymentStatus === 'CONFIRMED') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const pollPaymentStatus = async () => {
+      try {
+        const res = await api.get(`/api/payment/${activeBooking.id}/status`);
+        if (cancelled) return;
+        const paymentStatus = res.data?.paymentStatus;
+        const payment = res.data?.payment;
+        if (!paymentStatus) return;
+
+        setActiveBooking(prev => {
+          if (!prev || prev.id !== activeBooking.id) return prev;
+          return {
+            ...prev,
+            paymentStatus,
+            payment: payment || prev.payment
+          };
+        });
+
+        if (paymentStatus === 'CONFIRMED') {
+          setStep('RATING');
+        }
+      } catch {
+        // Silent retry from next interval.
+      }
+    };
+
+    pollPaymentStatus();
+    const interval = setInterval(pollPaymentStatus, 4000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [step, activeBooking?.id, activeBooking?.paymentStatus, setActiveBooking]);
 
   const handleSearchHosts = () => {
     setLoading(true); setError('');
@@ -160,6 +219,20 @@ export default function UserFlow() {
       const res = await api.post('/api/payment/confirm', { bookingId: activeBooking.id, confirmerId: user, role: 'user', confirmed: true });
       if (res.data?.booking) {
         setActiveBooking(res.data.booking);
+      } else {
+        // Keep UI responsive even if backend returns a partial object.
+        setActiveBooking(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            paymentStatus: 'PENDING',
+            payment: {
+              ...(prev.payment || {}),
+              status: prev.payment?.status || 'PENDING',
+              userConfirmed: true
+            }
+          };
+        });
       }
 
       // For cash flow, host also confirms receipt. Stay on payment screen until CONFIRMED.
@@ -192,8 +265,19 @@ export default function UserFlow() {
   const runningCost = activeBooking?.price ? ((elapsedSeconds / 3600) * activeBooking.price).toFixed(2) : '0.00';
 
   return (
-    <div className="p-4 pb-28">
+    <div className="p-4 pb-28 flow-shell">
       {error && <div className="p-3 mb-4 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg animate-pulse">{error}</div>}
+
+      <div className="flow-rail">
+        {FLOW_STEPS.map((label, index) => (
+          <div
+            key={label}
+            className={`flow-pill ${index < flowIndex ? 'done' : ''} ${index === flowIndex ? 'active' : ''}`}
+          >
+            {label}
+          </div>
+        ))}
+      </div>
 
       {step === 'REQUEST' && (
         <div className="space-y-4">
@@ -276,15 +360,19 @@ export default function UserFlow() {
 
           {/* ===== WAITING FOR HOST TO SCAN PIN ===== */}
           {(activeBooking.status === 'CONFIRMED' || activeBooking.status === 'BOOKED') && (
-            <Card className="text-center py-8">
-              <p className="text-gray-400 mb-2 text-sm">Show this PIN to your host to start charging</p>
-              <div className="my-6 p-6 bg-gray-900 rounded-2xl border-2 border-cyan-500 inline-block w-full">
-                <p className="text-xs text-cyan-400 uppercase tracking-widest mb-2">Start PIN</p>
-                <p className="text-7xl font-black tracking-[0.3em] text-white font-mono">
+            <Card className="tesla-panel text-center py-8">
+              <div className="tesla-status mx-auto mb-4">
+                <span className="status-dot" />
+                Host pairing in progress
+              </div>
+              <p className="text-gray-300 mb-2 text-sm">Show this PIN to your host to start charging</p>
+              <div className="my-6 pin-display inline-block w-full">
+                <p className="text-xs text-cyan-300 uppercase tracking-widest mb-2">Start PIN</p>
+                <p className="pin-text">
                   {activeBooking.startPin || '----'}
                 </p>
               </div>
-              <p className="text-xs text-gray-500 mt-2">⚡ Host will type this code to begin the session</p>
+              <p className="text-xs text-gray-400 mt-2">Host enters this code and charging starts instantly.</p>
               <div className="flex gap-2 mt-4">
                 {selectedHost?.location && (
                   <Button variant="outline" className="flex-1 py-2 text-xs" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedHost.location.lat},${selectedHost.location.lng}`, '_blank')}>🗺️ Navigate to Host</Button>
@@ -295,20 +383,26 @@ export default function UserFlow() {
 
           {/* ===== CHARGING IN PROGRESS ===== */}
           {activeBooking.status === 'STARTED' && (
-            <Card className="text-center py-8">
-              <p className="text-xs text-green-400 uppercase tracking-widest mb-4">⚡ Charging In Progress</p>
+            <Card className="tesla-panel text-center py-8">
+              <p className="text-xs text-green-300 uppercase tracking-widest mb-3">Charging Started</p>
+              <div className="battery-wrap">
+                <div className="battery" style={{ '--battery-level': `${Math.min(95, 18 + Math.floor(elapsedSeconds / 15))}%` }}>
+                  <div className="battery-fill" />
+                  <div className="battery-glow" />
+                </div>
+              </div>
               <div className="my-4">
                 <p className="text-5xl font-mono text-white mb-2">{formatTime(elapsedSeconds)}</p>
                 <p className="text-2xl text-cyan-400 font-bold">${runningCost}</p>
                 <p className="text-xs text-gray-500 mt-1">Running cost @ ${activeBooking.price}/hr</p>
               </div>
-              <div className="my-6 p-6 bg-gray-900 rounded-2xl border-2 border-orange-500 inline-block w-full">
-                <p className="text-xs text-orange-400 uppercase tracking-widest mb-2">Stop PIN</p>
-                <p className="text-7xl font-black tracking-[0.3em] text-white font-mono">
+              <div className="my-6 pin-display inline-block w-full">
+                <p className="text-xs text-orange-300 uppercase tracking-widest mb-2">Stop PIN</p>
+                <p className="pin-text">
                   {activeBooking.stopPin || '----'}
                 </p>
               </div>
-              <p className="text-xs text-gray-500">Show this PIN to your host when done charging</p>
+              <p className="text-xs text-gray-400">Show this PIN to your host when done charging.</p>
             </Card>
           )}
         </div>
@@ -316,14 +410,30 @@ export default function UserFlow() {
 
       {step === 'PAYMENT' && activeBooking && (
         <div className="space-y-4 text-center">
-          <h2 className="text-2xl font-bold text-white">Session Complete</h2>
-          <Card>
+          <h2 className="text-2xl font-bold text-white">Settle Payment</h2>
+          <Card className="tesla-panel">
             <p className="text-5xl font-black text-white my-6">${activeBooking.finalAmount}</p>
             <p className="text-gray-400 mb-6">Duration: {activeBooking.durationMinutes?.toFixed(1)} mins</p>
-            <p className="text-xs text-gray-500 mb-2">Payment status: <span className="font-bold text-cyan-400">{activeBooking.paymentStatus || 'PENDING'}</span></p>
-            {activeBooking.paymentStatus !== 'CONFIRMED' && (
-              <p className="text-xs text-gray-500 mb-4">Cash payment requires both confirmations. Waiting for host once you confirm.</p>
-            )}
+
+            <div className="payment-checklist mb-5">
+              <div className="payment-row">
+                <span className="text-sm text-gray-200">You confirmed payment</span>
+                <span className={`state ${activeBooking.payment?.userConfirmed ? 'done' : 'pending'}`}>
+                  {activeBooking.payment?.userConfirmed ? 'Done' : 'Pending'}
+                </span>
+              </div>
+              <div className="payment-row">
+                <span className="text-sm text-gray-200">Host confirmed receipt</span>
+                <span className={`state ${activeBooking.payment?.hostConfirmed ? 'done' : 'pending'}`}>
+                  {activeBooking.payment?.hostConfirmed ? 'Done' : 'Pending'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 mb-4">
+              Status: <span className="font-bold text-cyan-300">{activeBooking.paymentStatus || 'PENDING'}</span>.
+              {activeBooking.paymentStatus !== 'CONFIRMED' ? ' You will auto-advance once host confirms.' : ' Payment complete.'}
+            </p>
             <Button onClick={payCash} disabled={loading || activeBooking.payment?.userConfirmed || activeBooking.paymentStatus === 'CONFIRMED'}>
               {loading ? 'Processing...' : (activeBooking.payment?.userConfirmed ? 'Cash Marked Paid' : 'I Paid Cash')}
             </Button>

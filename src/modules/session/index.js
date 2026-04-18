@@ -16,6 +16,22 @@ function redactPinsForHost(booking) {
   };
 }
 
+function normalizePaymentOnCompletion(booking = {}) {
+  const current = booking.payment || {};
+  const userConfirmed = !!current.userConfirmed;
+  const hostConfirmed = !!current.hostConfirmed;
+  const isConfirmed = userConfirmed && hostConfirmed;
+  return {
+    method: current.method || 'cash',
+    userConfirmed,
+    hostConfirmed,
+    status: isConfirmed ? 'CONFIRMED' : 'PENDING',
+    confirmedAt: isConfirmed ? (current.confirmedAt || null) : null,
+    userConfirmedAt: current.userConfirmedAt || null,
+    hostConfirmedAt: current.hostConfirmedAt || null
+  };
+}
+
 async function getBookingById(bookingId) {
   // Try cache first
   const cached = await cache.get(`booking:${bookingId}`).catch(() => null);
@@ -96,7 +112,17 @@ async function stopSession(req, res) {
         ? (new Date(endTime) - new Date(booking.startTime)) / 60000
         : 0;
       const finalAmount = ((durationMinutes / 60) * (booking?.price || 5)).toFixed(2);
-      const updated = { ...(booking || { id: bookingId }), status: 'COMPLETED', endTime, durationMinutes: Number(durationMinutes.toFixed(2)), finalAmount: Number(finalAmount) };
+      const payment = normalizePaymentOnCompletion(booking || {});
+      const updated = {
+        ...(booking || { id: bookingId }),
+        status: 'COMPLETED',
+        endTime,
+        durationMinutes: Number(durationMinutes.toFixed(2)),
+        finalAmount: Number(finalAmount),
+        payment,
+        paymentStatus: payment.status,
+        paymentMethod: payment.method
+      };
       await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
       emitToUser(updated.userId, 'session_stopped', { booking: updated, finalAmount: updated.finalAmount });
       emitToHost(updated.hostId, 'session_stopped', { booking: redactPinsForHost(updated), finalAmount: updated.finalAmount });
@@ -116,16 +142,30 @@ async function stopSession(req, res) {
     const endTime = new Date().toISOString();
     const durationMinutes = (new Date(endTime) - new Date(booking.startTime)) / 60000;
     const finalAmount = Number(((durationMinutes / 60) * booking.price).toFixed(2));
+    const payment = normalizePaymentOnCompletion(booking);
 
     await db.collection('bookings').doc(bookingId).update({
       status: 'COMPLETED',
       endTime,
       durationMinutes: Number(durationMinutes.toFixed(2)),
       finalAmount,
-      stopPin: null   // consume the PIN
+      stopPin: null,   // consume the PIN
+      payment,
+      paymentStatus: payment.status,
+      paymentMethod: payment.method
     });
 
-    const updated = { ...booking, status: 'COMPLETED', endTime, durationMinutes: Number(durationMinutes.toFixed(2)), finalAmount, stopPin: null };
+    const updated = {
+      ...booking,
+      status: 'COMPLETED',
+      endTime,
+      durationMinutes: Number(durationMinutes.toFixed(2)),
+      finalAmount,
+      stopPin: null,
+      payment,
+      paymentStatus: payment.status,
+      paymentMethod: payment.method
+    };
     await cache.set(`booking:${bookingId}`, updated, 3600);
 
     emitToUser(booking.userId, 'session_stopped', { booking: updated, finalAmount });

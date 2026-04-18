@@ -27,6 +27,13 @@ function normalizePaymentState(booking = {}) {
   };
 }
 
+function toCashPaymentStatus(payment) {
+  if (payment.userConfirmed && payment.hostConfirmed) return 'CONFIRMED';
+  if (payment.userConfirmed) return 'USER_CONFIRMED';
+  if (payment.hostConfirmed) return 'HOST_CONFIRMED';
+  return 'PENDING';
+}
+
 async function createPaymentOrder(req, res) {
   res.json({ success: true, message: 'Create payment order (stub)' });
 }
@@ -68,7 +75,8 @@ async function confirmPayment(req, res) {
         ...existing,
         payment,
         paymentStatus: payment.status,
-        paymentMethod: payment.method
+        paymentMethod: payment.method,
+        settledAt: payment.status === 'CONFIRMED' ? now : existing.settledAt || null
       };
 
       await cache.set(`booking:${bookingId}`, booking, 3600).catch(() => {});
@@ -112,10 +120,37 @@ async function confirmPayment(req, res) {
         payment,
         paymentStatus: payment.status,
         paymentMethod: payment.method,
+        settledAt: payment.status === 'CONFIRMED' ? now : booking.settledAt || null,
         updatedAt: now
       };
 
       txn.update(bookingRef, patch);
+
+      const cashPaymentRef = db.collection('cash_payments').doc(bookingId);
+      const cashPaymentPatch = {
+        bookingId,
+        userId: booking.userId,
+        hostId: booking.hostId,
+        amount: booking.finalAmount || booking.price || 0,
+        status: toCashPaymentStatus(payment),
+        method: payment.method,
+        confirmationsRequired: true,
+        userConfirmation: payment.userConfirmed ? {
+          confirmed: true,
+          confirmedAt: payment.userConfirmedAt || now,
+          confirmedBy: booking.userId
+        } : null,
+        hostConfirmation: payment.hostConfirmed ? {
+          confirmed: true,
+          confirmedAt: payment.hostConfirmedAt || now,
+          confirmedBy: booking.hostId
+        } : null,
+        confirmedAt: payment.confirmedAt || null,
+        updatedAt: now,
+        createdAt: booking.createdAt || now
+      };
+      txn.set(cashPaymentRef, cashPaymentPatch, { merge: true });
+
       updatedBooking = { ...booking, ...patch };
     });
 
