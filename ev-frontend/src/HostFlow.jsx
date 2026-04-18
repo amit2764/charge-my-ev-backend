@@ -18,6 +18,12 @@ function getHostFlowIndex(activeBooking, isHostAvailable) {
   return 0;
 }
 
+function canRenderHostBooking(booking, userId) {
+  if (!booking) return false;
+  if (booking.hostId && userId) return booking.hostId === userId;
+  return true;
+}
+
 export default function HostFlow() {
   const { user, hostProfile, setHostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking } = useStore();
   const [requests, setRequests] = useState([]);
@@ -80,20 +86,20 @@ export default function HostFlow() {
 
     const onBookingConfirmed = ({ booking }) => {
       if (!booking || booking.hostId !== user) return;
-      setActiveBooking(booking);
+      setActiveBooking(booking, 'host');
       setRequests([]);
     };
 
     // When host verified start PIN → update booking status
     const onSessionStarted = ({ booking }) => {
       if (!booking || booking.hostId !== user) return;
-      setActiveBooking(booking);
+      setActiveBooking(booking, 'host');
     };
 
     // When session ends
     const onSessionStopped = ({ booking, finalAmount }) => {
       if (!booking || booking.hostId !== user) return;
-      setActiveBooking({ ...booking, finalAmount });
+      setActiveBooking({ ...booking, finalAmount }, 'host');
       setElapsedSeconds(0);
     };
 
@@ -105,7 +111,7 @@ export default function HostFlow() {
           paymentStatus,
           payment
         };
-      });
+      }, 'host');
     };
 
     socket.on('new_request', onNewRequest);
@@ -150,6 +156,28 @@ export default function HostFlow() {
     };
   }, [isHostAvailable, activeBooking, user, hostProfile, radiusKm, setActiveBooking]);
 
+  useEffect(() => {
+    const recover = async () => {
+      if (!user) return;
+
+      if (canRenderHostBooking(activeBooking, user)) {
+        return;
+      }
+
+      try {
+        const res = await api.get(`/api/bookings/active?userId=${encodeURIComponent(user)}&role=host`);
+        const booking = res.data?.booking;
+        if (booking) {
+          setActiveBooking(booking, 'host');
+        }
+      } catch {
+        // Keep current screen as fallback.
+      }
+    };
+
+    recover();
+  }, [user, activeBooking, setActiveBooking]);
+
   // Fallback polling for payment status after session completion.
   useEffect(() => {
     if (!activeBooking?.id || activeBooking?.status !== 'COMPLETED' || activeBooking?.paymentStatus === 'CONFIRMED') {
@@ -173,7 +201,7 @@ export default function HostFlow() {
             paymentStatus,
             payment: payment || prev.payment
           };
-        });
+        }, 'host');
       } catch {
         // Keep retrying silently.
       }
@@ -258,7 +286,7 @@ export default function HostFlow() {
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/start', { bookingId: activeBooking.id, otp: otpInput });
-      setActiveBooking(res.data.booking);
+      setActiveBooking(res.data.booking, 'host');
       setOtpInput('');
     } catch (err) { 
       setError(err.response?.data?.error || 'Invalid Start OTP. Please check the code.'); 
@@ -269,7 +297,7 @@ export default function HostFlow() {
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/stop', { bookingId: activeBooking.id, otp: otpInput });
-      setActiveBooking({ ...activeBooking, status: 'COMPLETED', finalAmount: res.data.finalAmount });
+      setActiveBooking({ ...activeBooking, status: 'COMPLETED', finalAmount: res.data.finalAmount }, 'host');
       setElapsedSeconds(0);
     } catch (err) { 
       setError(err.response?.data?.error || 'Invalid Stop OTP. Please check the code.'); 
@@ -286,7 +314,7 @@ export default function HostFlow() {
         confirmed: true
       });
       if (res.data?.booking) {
-        setActiveBooking(res.data.booking);
+        setActiveBooking(res.data.booking, 'host');
       }
     } catch (err) {
       setError('Payment confirmation failed: ' + (err.response?.data?.error || err.message));
@@ -304,7 +332,7 @@ export default function HostFlow() {
 
   if (!hostProfile) return <HostOnboarding />;
 
-  if (activeBooking) {
+  if (activeBooking && canRenderHostBooking(activeBooking, user)) {
     return (
       <div className="p-4 pb-28 space-y-4 flow-shell">
         <div className="flow-rail">

@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // User Store for EV Frontend
 export const useStore = create((set, get) => ({
   // Auth
@@ -7,12 +16,13 @@ export const useStore = create((set, get) => ({
   role: localStorage.getItem('role') || 'user', // 'user' or 'host'
 
   // Profiles
-  userProfile: JSON.parse(localStorage.getItem('userProfile')) || null,
-  hostProfile: JSON.parse(localStorage.getItem('hostProfile')) || null,
+  userProfile: readJson('userProfile', null),
+  hostProfile: readJson('hostProfile', null),
 
   // Active states
-  activeRequest: null,
-  activeBooking: null,
+  activeRequest: readJson('activeRequest', null),
+  activeBooking: readJson('activeBooking', null),
+  activeBookingRole: localStorage.getItem('activeBookingRole') || null,
 
   // Host availability
   isHostAvailable: false,
@@ -38,9 +48,37 @@ export const useStore = create((set, get) => ({
     set({ hostProfile: profile });
   },
 
-  setActiveRequest: (request) => set({ activeRequest: request }),
+  setActiveRequest: (request) => {
+    if (request) {
+      localStorage.setItem('activeRequest', JSON.stringify(request));
+    } else {
+      localStorage.removeItem('activeRequest');
+    }
+    set({ activeRequest: request });
+  },
 
-  setActiveBooking: (booking) => set({ activeBooking: booking }),
+  setActiveBooking: (bookingOrUpdater, ownerRole = null) => {
+    const currentBooking = get().activeBooking;
+    const nextBooking = typeof bookingOrUpdater === 'function'
+      ? bookingOrUpdater(currentBooking)
+      : bookingOrUpdater;
+
+    if (nextBooking) {
+      localStorage.setItem('activeBooking', JSON.stringify(nextBooking));
+      const resolvedRole = ownerRole || get().activeBookingRole || null;
+      if (resolvedRole) {
+        localStorage.setItem('activeBookingRole', resolvedRole);
+        set({ activeBooking: nextBooking, activeBookingRole: resolvedRole });
+        return;
+      }
+      set({ activeBooking: nextBooking });
+      return;
+    }
+
+    localStorage.removeItem('activeBooking');
+    localStorage.removeItem('activeBookingRole');
+    set({ activeBooking: null, activeBookingRole: null });
+  },
 
   setIsHostAvailable: (available) => set({ isHostAvailable: available }),
 
@@ -56,8 +94,12 @@ export const useStore = create((set, get) => ({
       hostProfile: null,
       activeRequest: null,
       activeBooking: null,
+      activeBookingRole: null,
       isHostAvailable: false
     });
+    localStorage.removeItem('activeRequest');
+    localStorage.removeItem('activeBooking');
+    localStorage.removeItem('activeBookingRole');
   }
 }));
 

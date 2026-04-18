@@ -15,6 +15,16 @@ function getFlowIndex(step, booking) {
   return 0;
 }
 
+function deriveUserStep(booking) {
+  if (!booking) return 'REQUEST';
+  const status = booking.status;
+  if (status === 'BOOKED' || status === 'CONFIRMED' || status === 'STARTED') return 'CHARGING';
+  if (status === 'COMPLETED') {
+    return booking.paymentStatus === 'CONFIRMED' ? 'RATING' : 'PAYMENT';
+  }
+  return 'REQUEST';
+}
+
 export default function UserFlow() {
   const { user, userProfile, activeRequest, setActiveRequest, activeBooking, setActiveBooking } = useStore();
   const [step, setStep] = useState('REQUEST'); // REQUEST, MATCHING, CONFIRM, CHARGING, PAYMENT, RATING
@@ -85,7 +95,7 @@ export default function UserFlow() {
 
     // Host verified the start PIN → session started, get stopPin
     socket.on('session_started', ({ booking }) => {
-      setActiveBooking(booking);
+      setActiveBooking(booking, 'user');
       setStep('CHARGING');
     });
 
@@ -96,7 +106,7 @@ export default function UserFlow() {
         finalAmount,
         paymentStatus: booking.paymentStatus || 'PENDING',
         payment: booking.payment || { userConfirmed: false, hostConfirmed: false, status: 'PENDING' }
-      });
+      }, 'user');
       setStep('PAYMENT');
     });
 
@@ -108,7 +118,7 @@ export default function UserFlow() {
           paymentStatus,
           payment
         };
-      });
+      }, 'user');
 
       // Move to rating only after full payment confirmation is complete.
       if (paymentStatus === 'CONFIRMED') {
@@ -125,6 +135,30 @@ export default function UserFlow() {
       socket.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    const recover = async () => {
+      if (!user) return;
+
+      if (activeBooking?.userId === user) {
+        setStep(deriveUserStep(activeBooking));
+        return;
+      }
+
+      try {
+        const res = await api.get(`/api/bookings/active?userId=${encodeURIComponent(user)}&role=user`);
+        const booking = res.data?.booking;
+        if (booking) {
+          setActiveBooking(booking, 'user');
+          setStep(deriveUserStep(booking));
+        }
+      } catch {
+        // Keep current screen as fallback.
+      }
+    };
+
+    recover();
+  }, [user, activeBooking, setActiveBooking]);
 
   // Fallback sync for payment state in case socket event is missed.
   useEffect(() => {
@@ -149,7 +183,7 @@ export default function UserFlow() {
             paymentStatus,
             payment: payment || prev.payment
           };
-        });
+        }, 'user');
 
         if (paymentStatus === 'CONFIRMED') {
           setStep('RATING');
@@ -206,7 +240,7 @@ export default function UserFlow() {
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/book', { userId: user, hostId: selectedHost.hostId, chargerId: 'charger_auto', price: selectedHost.price, requestId: activeRequest.id });
-      setActiveBooking(res.data.booking);
+      setActiveBooking(res.data.booking, 'user');
       setStep('CHARGING');
     } catch (err) { 
       setError('Booking failed: ' + (err.response?.data?.error || err.message)); 
@@ -218,7 +252,7 @@ export default function UserFlow() {
     try {
       const res = await api.post('/api/payment/confirm', { bookingId: activeBooking.id, confirmerId: user, role: 'user', confirmed: true });
       if (res.data?.booking) {
-        setActiveBooking(res.data.booking);
+        setActiveBooking(res.data.booking, 'user');
       } else {
         // Keep UI responsive even if backend returns a partial object.
         setActiveBooking(prev => {
@@ -232,7 +266,7 @@ export default function UserFlow() {
               userConfirmed: true
             }
           };
-        });
+        }, 'user');
       }
 
       // For cash flow, host also confirms receipt. Stay on payment screen until CONFIRMED.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from './store';
 import LoginScreen from './LoginScreen';
 import UserFlow from './UserFlow';
@@ -8,8 +8,32 @@ import HostEarnings from './HostEarnings';
 import HostFlow from './HostFlow';
 
 export default function App() {
-  const { user, role, setRole, logout } = useStore();
+  const { user, role, setRole, logout, activeBooking, activeBookingRole } = useStore();
   const [activeTab, setActiveTab] = useState('charge');
+
+  const isSessionLocked = !!(
+    activeBooking &&
+    (
+      activeBooking.status === 'BOOKED' ||
+      activeBooking.status === 'CONFIRMED' ||
+      activeBooking.status === 'STARTED' ||
+      (activeBooking.status === 'COMPLETED' && activeBooking.paymentStatus !== 'CONFIRMED')
+    )
+  );
+
+  useEffect(() => {
+    if (!isSessionLocked || !activeBookingRole || role === activeBookingRole) return;
+    setRole(activeBookingRole);
+    setActiveTab(activeBookingRole === 'host' ? 'dashboard' : 'charge');
+  }, [isSessionLocked, activeBookingRole, role, setRole]);
+
+  const switchRole = (nextRole) => {
+    if (isSessionLocked && activeBookingRole && nextRole !== activeBookingRole) {
+      return;
+    }
+    setRole(nextRole);
+    setActiveTab(nextRole === 'host' ? 'dashboard' : 'charge');
+  };
 
   if (!user) return <LoginScreen />;
 
@@ -21,10 +45,20 @@ export default function App() {
         
         {/* CRITICAL: Top-Level Role Toggle */}
         <div className="flex bg-gray-900 rounded-lg p-1 border border-gray-800">
-          <button onClick={() => { setRole('user'); setActiveTab('charge'); }} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${role === 'user' ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>
+          <button
+            onClick={() => switchRole('user')}
+            disabled={isSessionLocked && activeBookingRole === 'host'}
+            title={isSessionLocked && activeBookingRole === 'host' ? 'Active host session in progress. Finish it first.' : ''}
+            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${role === 'user' ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-400 hover:text-gray-200'} ${isSessionLocked && activeBookingRole === 'host' ? 'opacity-40 cursor-not-allowed' : ''}`}
+          >
             User Mode
           </button>
-          <button onClick={() => { setRole('host'); setActiveTab('dashboard'); }} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${role === 'host' ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-400 hover:text-gray-200'}`}>
+          <button
+            onClick={() => switchRole('host')}
+            disabled={isSessionLocked && activeBookingRole === 'user'}
+            title={isSessionLocked && activeBookingRole === 'user' ? 'Active user session in progress. Finish it first.' : ''}
+            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${role === 'host' ? 'bg-cyan-500 text-black shadow-sm' : 'text-gray-400 hover:text-gray-200'} ${isSessionLocked && activeBookingRole === 'user' ? 'opacity-40 cursor-not-allowed' : ''}`}
+          >
             Host Mode
           </button>
         </div>

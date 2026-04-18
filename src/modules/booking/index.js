@@ -136,10 +136,54 @@ async function getBooking(req, res) {
   }
 }
 
+async function getActiveBooking(req, res) {
+  try {
+    const { userId, role } = req.query || {};
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userId is required' });
+    }
+
+    const normalizedRole = String(role || 'user').toLowerCase();
+    const roleField = normalizedRole === 'host' ? 'hostId' : 'userId';
+
+    if (!db || mockMode) {
+      return res.json({ success: true, booking: null });
+    }
+
+    const snap = await db.collection('bookings')
+      .where(roleField, '==', userId)
+      .orderBy('createdAt', 'desc')
+      .limit(20)
+      .get();
+
+    if (snap.empty) {
+      return res.json({ success: true, booking: null });
+    }
+
+    const candidates = snap.docs.map((doc) => doc.data());
+    const active = candidates.find((b) => {
+      const status = String(b.status || '').toUpperCase();
+      if (status === 'BOOKED' || status === 'CONFIRMED' || status === 'STARTED') return true;
+      if (status === 'COMPLETED' && String(b.paymentStatus || 'PENDING').toUpperCase() !== 'CONFIRMED') return true;
+      return false;
+    }) || null;
+
+    if (active) {
+      await cache.set(`booking:${active.id}`, active, 60).catch(() => {});
+    }
+
+    return res.json({ success: true, booking: active });
+  } catch (err) {
+    logger.error('getActiveBooking failed', { err: err.message });
+    return res.status(500).json({ success: false, error: 'Failed to load active booking' });
+  }
+}
+
 function registerRoutes(app) {
   const router = express.Router();
   router.post('/book', createBooking);
   router.get('/booking/:id', getBooking);
+  router.get('/bookings/active', getActiveBooking);
   app.use('/api', router);
 }
 
