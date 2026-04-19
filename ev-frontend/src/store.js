@@ -1,8 +1,33 @@
 import { create } from 'zustand';
 
+function safeGetItem(key, fallback = null) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures (private mode/quota/security restrictions).
+  }
+}
+
+function safeRemoveItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
 function readJson(key, fallback) {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = safeGetItem(key);
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
@@ -19,12 +44,12 @@ async function hashPin(pin) {
 // User Store for EV Frontend
 export const useStore = create((set, get) => ({
   // Auth
-  user: localStorage.getItem('user') || null,
-  role: localStorage.getItem('role') || 'user', // 'user' or 'host'
+  user: safeGetItem('user') || null,
+  role: safeGetItem('role') || 'user', // 'user' or 'host'
 
   // Quick-login credentials (device-local)
-  pinHash: localStorage.getItem('pinHash') || null,
-  biometricCredentialId: localStorage.getItem('biometricCredentialId') || null,
+  pinHash: safeGetItem('pinHash') || null,
+  biometricCredentialId: safeGetItem('biometricCredentialId') || null,
 
   // Profiles
   userProfile: readJson('userProfile', null),
@@ -33,25 +58,25 @@ export const useStore = create((set, get) => ({
   // Active states
   activeRequest: readJson('activeRequest', null),
   activeBooking: readJson('activeBooking', null),
-  activeBookingRole: localStorage.getItem('activeBookingRole') || null,
+  activeBookingRole: safeGetItem('activeBookingRole') || null,
 
   // Host availability
   isHostAvailable: false,
 
   // Actions
   setUser: (user) => {
-    localStorage.setItem('user', user);
+    safeSetItem('user', user);
     set({ user });
   },
 
   setRole: (role) => {
-    localStorage.setItem('role', role);
+    safeSetItem('role', role);
     set({ role });
   },
 
   setPin: async (pin) => {
     const hash = await hashPin(pin);
-    localStorage.setItem('pinHash', hash);
+    safeSetItem('pinHash', hash);
     set({ pinHash: hash });
   },
 
@@ -61,31 +86,31 @@ export const useStore = create((set, get) => ({
   },
 
   clearPin: () => {
-    localStorage.removeItem('pinHash');
-    localStorage.removeItem('biometricCredentialId');
+    safeRemoveItem('pinHash');
+    safeRemoveItem('biometricCredentialId');
     set({ pinHash: null, biometricCredentialId: null });
   },
 
   setBiometricCredentialId: (id) => {
-    localStorage.setItem('biometricCredentialId', id);
+    safeSetItem('biometricCredentialId', id);
     set({ biometricCredentialId: id });
   },
 
   setUserProfile: (profile) => {
-    localStorage.setItem('userProfile', JSON.stringify(profile));
+    safeSetItem('userProfile', JSON.stringify(profile));
     set({ userProfile: profile });
   },
 
   setHostProfile: (profile) => {
-    localStorage.setItem('hostProfile', JSON.stringify(profile));
+    safeSetItem('hostProfile', JSON.stringify(profile));
     set({ hostProfile: profile });
   },
 
   setActiveRequest: (request) => {
     if (request) {
-      localStorage.setItem('activeRequest', JSON.stringify(request));
+      safeSetItem('activeRequest', JSON.stringify(request));
     } else {
-      localStorage.removeItem('activeRequest');
+      safeRemoveItem('activeRequest');
     }
     set({ activeRequest: request });
   },
@@ -97,10 +122,10 @@ export const useStore = create((set, get) => ({
       : bookingOrUpdater;
 
     if (nextBooking) {
-      localStorage.setItem('activeBooking', JSON.stringify(nextBooking));
+      safeSetItem('activeBooking', JSON.stringify(nextBooking));
       const resolvedRole = ownerRole || get().activeBookingRole || null;
       if (resolvedRole) {
-        localStorage.setItem('activeBookingRole', resolvedRole);
+        safeSetItem('activeBookingRole', resolvedRole);
         set({ activeBooking: nextBooking, activeBookingRole: resolvedRole });
         return;
       }
@@ -108,18 +133,18 @@ export const useStore = create((set, get) => ({
       return;
     }
 
-    localStorage.removeItem('activeBooking');
-    localStorage.removeItem('activeBookingRole');
+    safeRemoveItem('activeBooking');
+    safeRemoveItem('activeBookingRole');
     set({ activeBooking: null, activeBookingRole: null });
   },
 
   setIsHostAvailable: (available) => set({ isHostAvailable: available }),
 
   logout: () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('role');
-    localStorage.removeItem('userProfile');
-    localStorage.removeItem('hostProfile');
+    safeRemoveItem('user');
+    safeRemoveItem('role');
+    safeRemoveItem('userProfile');
+    safeRemoveItem('hostProfile');
     // Keep PIN and biometric on logout so quick-login works on next open
     set({
       user: null,
@@ -131,9 +156,9 @@ export const useStore = create((set, get) => ({
       activeBookingRole: null,
       isHostAvailable: false
     });
-    localStorage.removeItem('activeRequest');
-    localStorage.removeItem('activeBooking');
-    localStorage.removeItem('activeBookingRole');
+    safeRemoveItem('activeRequest');
+    safeRemoveItem('activeBooking');
+    safeRemoveItem('activeBookingRole');
   }
 }));
 
@@ -145,12 +170,12 @@ export const useAdminStore = create((set) => ({
   token: null,
 
   login: (userData, role, token) => {
-    localStorage.setItem('adminToken', token);
+    safeSetItem('adminToken', token);
     set({ adminUser: userData, role, token });
   },
 
   logout: () => {
-    localStorage.removeItem('adminToken');
+    safeRemoveItem('adminToken');
     set({ adminUser: null, role: null, token: null });
   }
 }));

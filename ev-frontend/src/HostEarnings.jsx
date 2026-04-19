@@ -25,7 +25,9 @@ export default function HostEarnings() {
     fetchEarnings();
   }, [user]);
 
-  const totalEarnings = sessions.reduce((sum, s) => sum + s.amount, 0).toFixed(2);
+  const totalEarnings = sessions
+    .reduce((sum, s) => sum + (Number.isFinite(Number(s?.amount)) ? Number(s.amount) : 0), 0)
+    .toFixed(2);
 
   return (
     <div className="p-4 pb-28 space-y-6">
@@ -43,10 +45,10 @@ export default function HostEarnings() {
         sessions.map(session => (
           <Card key={session.id} className="mb-3">
             <div className="flex justify-between items-center mb-1">
-              <span className="font-bold text-white">{session.user}</span>
-              <span className="font-bold text-green-400">+${session.amount.toFixed(2)}</span>
+              <span className="font-bold text-white">{session.user || 'Unknown user'}</span>
+              <span className="font-bold text-green-400">+${(Number.isFinite(Number(session.amount)) ? Number(session.amount) : 0).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm text-gray-400"><span>{session.date}</span><span>{session.duration}</span></div>
+            <div className="flex justify-between text-sm text-gray-400"><span>{session.date || 'Unknown date'}</span><span>{session.duration || '-'}</span></div>
           </Card>
         ))
       )}

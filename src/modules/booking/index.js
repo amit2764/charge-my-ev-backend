@@ -202,7 +202,7 @@ async function getActiveBooking(req, res) {
       return res.json({ success: true, booking: null });
     }
 
-    const candidates = snap.docs.map((doc) => doc.data());
+    const candidates = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     const active = candidates.find((b) => {
       const status = String(b.status || '').toUpperCase();
       if (status === 'BOOKED' || status === 'CONFIRMED' || status === 'STARTED') return true;
@@ -210,7 +210,7 @@ async function getActiveBooking(req, res) {
       return false;
     }) || null;
 
-    if (active) {
+    if (active?.id) {
       await cache.set(`booking:${active.id}`, active, 60).catch(() => {});
     }
 

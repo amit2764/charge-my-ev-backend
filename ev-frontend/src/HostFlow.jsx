@@ -8,6 +8,11 @@ import './FlowVisuals.css';
 
 const HOST_FLOW_STEPS = ['Online', 'PIN', 'Charging', 'Payment', 'Done'];
 
+function toFiniteNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 function getHostFlowIndex(activeBooking, isHostAvailable) {
   if (!isHostAvailable && !activeBooking) return 0;
   if (!activeBooking) return 0;
@@ -283,6 +288,11 @@ export default function HostFlow() {
   };
 
   const startSession = async () => {
+    if (!activeBooking?.id) {
+      setError('No active booking found to start.');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/start', { bookingId: activeBooking.id, otp: otpInput });
@@ -294,6 +304,11 @@ export default function HostFlow() {
   };
 
   const stopSession = async () => {
+    if (!activeBooking?.id) {
+      setError('No active booking found to stop.');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/stop', { bookingId: activeBooking.id, otp: otpInput });
@@ -305,6 +320,11 @@ export default function HostFlow() {
   };
 
   const confirmCashReceived = async () => {
+    if (!activeBooking?.id) {
+      setError('No completed booking found for payment confirmation.');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/payment/confirm', {
@@ -328,7 +348,10 @@ export default function HostFlow() {
     const s = (secs % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
-  const currentEarnings = activeBooking?.price ? ((elapsedSeconds / 3600) * activeBooking.price).toFixed(2) : '0.00';
+  const bookingPrice = toFiniteNumber(activeBooking?.price, 0);
+  const currentEarnings = bookingPrice > 0 ? ((elapsedSeconds / 3600) * bookingPrice).toFixed(2) : '0.00';
+  const displayFinalAmount = toFiniteNumber(activeBooking?.finalAmount, 0).toFixed(2);
+  const displayDurationMinutes = toFiniteNumber(activeBooking?.durationMinutes, 0).toFixed(1);
 
   if (!hostProfile) return <HostOnboarding />;
 
@@ -407,8 +430,8 @@ export default function HostFlow() {
           {activeBooking.status === 'COMPLETED' && (
             <>
               <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Total Earned</p>
-              <p className="text-5xl text-green-400 font-black my-6">${activeBooking.finalAmount}</p>
-              <p className="text-gray-400 mb-6">{activeBooking.durationMinutes?.toFixed(1)} mins charging</p>
+              <p className="text-5xl text-green-400 font-black my-6">${displayFinalAmount}</p>
+              <p className="text-gray-400 mb-6">{displayDurationMinutes} mins charging</p>
               <div className="payment-checklist mb-5">
                 <div className="payment-row">
                   <span className="text-sm text-gray-200">User marked paid</span>

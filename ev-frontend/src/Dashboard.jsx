@@ -88,7 +88,7 @@ export default function Dashboard({ user, onLogout }) {
       <header className="app-header">
         <h2>Charge My EV</h2>
         <div className="user-profile">
-          <span className="phone-badge">{user.slice(-4)}</span>
+          <span className="phone-badge">{String(user || '----').slice(-4)}</span>
           <button className="logout-btn" onClick={onLogout}>Logout</button>
         </div>
       </header>
@@ -108,7 +108,7 @@ export default function Dashboard({ user, onLogout }) {
           ) : (
             hostResponses.map((res) => (
               <div key={res.id} style={{ background: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '10px', border: '1px solid #bbdefb' }}>
-                <p style={{ margin: '0 0 5px 0' }}><strong>Host ID:</strong> {res.hostId.slice(-4)}</p>
+                <p style={{ margin: '0 0 5px 0' }}><strong>Host ID:</strong> {String(res.hostId || '----').slice(-4)}</p>
                 <p style={{ margin: '0 0 5px 0' }}><strong>Price:</strong> ${res.price}/hr</p>
                 <p style={{ margin: '0 0 10px 0' }}><strong>ETA:</strong> {res.estimatedArrival} mins away</p>
                 <button className="fab-button" style={{ position: 'relative', left: '0', transform: 'none', width: '100%', justifyContent: 'center', padding: '10px', background: '#00C853' }}>Accept Offer</button>

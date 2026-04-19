@@ -18,7 +18,16 @@ function readDismissedPaymentBookings() {
 }
 
 function writeDismissedPaymentBookings(ids) {
-  localStorage.setItem('dismissedPaymentBookings', JSON.stringify(ids));
+  try {
+    localStorage.setItem('dismissedPaymentBookings', JSON.stringify(ids));
+  } catch {
+    // Ignore storage write failures so UI does not crash in restricted browsers.
+  }
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
 }
 
 function getFlowIndex(step, booking) {
@@ -295,6 +304,12 @@ export default function UserFlow() {
   };
 
   const confirmBooking = async () => {
+    if (!selectedHost?.hostId || !activeRequest?.id) {
+      setError('Host offer is no longer valid. Please select a host again.');
+      setStep('MATCHING');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/book', { userId: user, hostId: selectedHost.hostId, chargerId: 'charger_auto', price: selectedHost.price, requestId: activeRequest.id });
@@ -306,6 +321,12 @@ export default function UserFlow() {
   };
 
   const payCash = async () => {
+    if (!activeBooking?.id) {
+      setError('No active booking found for payment.');
+      setStep('REQUEST');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       const res = await api.post('/api/payment/confirm', { bookingId: activeBooking.id, confirmerId: user, role: 'user', confirmed: true });
@@ -338,6 +359,11 @@ export default function UserFlow() {
   };
 
   const emergencyStop = async () => {
+    if (!activeBooking?.id) {
+      setError('No running session found to stop.');
+      return;
+    }
+
     if (!window.confirm('Stop the session immediately without a PIN? This cannot be undone.')) return;
     setLoading(true); setError('');
     try {
@@ -362,6 +388,11 @@ export default function UserFlow() {
   };
 
   const changeMode = async (mode) => {
+    if (!activeBooking?.id) {
+      setError('No running session found for mode change.');
+      return;
+    }
+
     if (activeBooking?.chargingMode === mode) return;
     setLoading(true); setError('');
     try {
@@ -373,6 +404,12 @@ export default function UserFlow() {
   };
 
   const submitRating = async () => {
+    if (!activeBooking?.id || !activeBooking?.hostId) {
+      setError('No completed booking found to rate.');
+      setStep('REQUEST');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       await api.post('/api/rating', { bookingId: activeBooking.id, userId: user, hostId: activeBooking.hostId, rating, review });
@@ -398,7 +435,10 @@ export default function UserFlow() {
     const s = (secs % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
   };
-  const runningCost = activeBooking?.price ? ((elapsedSeconds / 3600) * activeBooking.price).toFixed(2) : '0.00';
+  const bookingPrice = toFiniteNumber(activeBooking?.price, 0);
+  const runningCost = bookingPrice > 0 ? ((elapsedSeconds / 3600) * bookingPrice).toFixed(2) : '0.00';
+  const displayFinalAmount = toFiniteNumber(activeBooking?.finalAmount, 0).toFixed(2);
+  const displayDurationMinutes = toFiniteNumber(activeBooking?.durationMinutes, 0).toFixed(1);
 
   return (
     <div className="p-4 pb-28 flow-shell">
@@ -477,7 +517,7 @@ export default function UserFlow() {
           </div>
           <Card>
             <div className="mb-6 space-y-2">
-              <div className="flex justify-between"><span className="text-gray-400">Host ID</span><span className="text-white font-bold">{selectedHost.hostId.slice(-4)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-400">Host ID</span><span className="text-white font-bold">{String(selectedHost.hostId || '----').slice(-4)}</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Distance</span><span className="text-white font-bold">{selectedHost.estimatedArrival} mins away</span></div>
               <div className="flex justify-between"><span className="text-gray-400">Rate</span><span className="text-white font-bold">${selectedHost.price}/hr</span></div>
               {selectedHost.address && <div className="text-sm text-gray-400 mt-2 border-t border-gray-800 pt-2">📍 {selectedHost.address} {selectedHost.landmark ? `(${selectedHost.landmark})` : ''}</div>}
@@ -577,8 +617,8 @@ export default function UserFlow() {
         <div className="space-y-4 text-center">
           <h2 className="text-2xl font-bold text-white">Settle Payment</h2>
           <Card className="tesla-panel">
-            <p className="text-5xl font-black text-white my-6">${activeBooking.finalAmount}</p>
-            <p className="text-gray-400 mb-6">Duration: {activeBooking.durationMinutes?.toFixed(1)} mins</p>
+            <p className="text-5xl font-black text-white my-6">${displayFinalAmount}</p>
+            <p className="text-gray-400 mb-6">Duration: {displayDurationMinutes} mins</p>
 
             <div className="payment-checklist mb-5">
               <div className="payment-row">
