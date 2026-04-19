@@ -31,6 +31,23 @@ export const Input = ({ label, ...props }) => (
   </div>
 );
 
+export const Select = ({ label, value, onChange, options = [], className = '' }) => (
+  <div className={`mb-4 w-full ${className}`}>
+    {label && <label className="block text-sm font-semibold text-gray-600 mb-1">{label}</label>}
+    <select
+      value={value}
+      onChange={onChange}
+      className="w-full p-3 bg-gray-900 border-2 border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all appearance-none"
+    >
+      {options.map(opt => (
+        typeof opt === 'string'
+          ? <option key={opt} value={opt}>{opt}</option>
+          : <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+);
+
 export const Card = ({ children, className = '' }) => (
   <div className={`bg-gray-900/50 backdrop-blur-sm p-6 rounded-2xl border border-gray-800 ${className}`}>
     {children}

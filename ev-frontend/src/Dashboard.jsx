@@ -20,7 +20,7 @@ export default function Dashboard({ user, onLogout }) {
       if (response.data.success) {
         setChargers(response.data.stations);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load nearby chargers.');
     } finally {
       setLoading(false);
@@ -77,7 +77,7 @@ export default function Dashboard({ user, onLogout }) {
         setActiveRequestId(newReqId);
         socket.emit('subscribe', { userId: user, requestId: newReqId }); // Tell backend to send updates!
       }
-    } catch (err) {
+    } catch {
       alert('Failed to send request. Are you sure you are logged in?');
     }
   };

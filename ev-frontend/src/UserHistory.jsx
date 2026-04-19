@@ -18,7 +18,7 @@ export default function UserHistory() {
           setSessions(res.data.bookings);
         }
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Failed to load session history.');
         setLoading(false);
       }
@@ -37,15 +37,35 @@ export default function UserHistory() {
       ) : sessions.length === 0 ? (
         <Card className="text-center py-10"><p className="text-gray-400">No past charging sessions found.</p></Card>
       ) : (
-        sessions.map(session => (
-          <Card key={session.id} className="mb-4">
-            <div className="flex justify-between items-start mb-3">
-              <div><p className="font-bold text-white text-lg">{session.host}</p><p className="text-sm text-gray-400">{session.date}</p></div>
-              <div className="text-right"><p className="font-bold text-cyan-400 text-lg">${session.amount.toFixed(2)}</p><p className="text-sm text-gray-400">{session.duration}</p></div>
-            </div>
-            <Button variant="outline" className="py-2 text-sm mt-2">Re-book Host</Button>
-          </Card>
-        ))
+        sessions.map(booking => {
+          const date = booking.createdAt
+            ? new Date(booking.createdAt._seconds ? booking.createdAt._seconds * 1000 : booking.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '—';
+          const hostDisplay = booking.hostId ? `…${booking.hostId.slice(-4)}` : '—';
+          const amount = typeof booking.finalAmount === 'number' ? booking.finalAmount : (booking.price ?? 0);
+          const duration = booking.durationMinutes ? `${booking.durationMinutes} min` : '—';
+          const modeLabel = { eco: '🌿 Eco', normal: '⚡ Normal', boost: '🚀 Boost' }[booking.chargingMode] || '';
+          const statusColor = booking.status === 'COMPLETED' ? 'text-green-400' : 'text-yellow-400';
+
+          return (
+            <Card key={booking.id} className="mb-4">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="font-bold text-white text-lg">Host {hostDisplay}</p>
+                  <p className="text-sm text-gray-400">{date}</p>
+                  {modeLabel && <p className="text-xs text-gray-500 mt-1">{modeLabel}</p>}
+                  {booking.emergencyStopped && <p className="text-xs text-red-400 mt-1">⛔ Emergency stop</p>}
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-cyan-400 text-lg">₹{amount.toFixed(2)}</p>
+                  <p className="text-sm text-gray-400">{duration}</p>
+                  <p className={`text-xs font-semibold mt-1 ${statusColor}`}>{booking.status}</p>
+                  {booking.paymentStatus && <p className="text-xs text-gray-500">{booking.paymentStatus}</p>}
+                </div>
+              </div>
+            </Card>
+          );
+        })
       )}
     </div>
   );

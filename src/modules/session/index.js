@@ -178,10 +178,120 @@ async function stopSession(req, res) {
   }
 }
 
+async function emergencyStop(req, res) {
+  try {
+    const { bookingId, userId } = req.body || {};
+    if (!bookingId || !userId) {
+      return res.status(400).json({ success: false, error: 'bookingId and userId are required' });
+    }
+
+    const booking = await getBookingById(bookingId);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+
+    if (booking.userId !== userId && booking.hostId !== userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized to stop this session' });
+    }
+
+    if (booking.status !== 'STARTED') {
+      return res.status(400).json({ success: false, error: 'Session is not currently running' });
+    }
+
+    const endTime = new Date().toISOString();
+    const durationMinutes = booking.startTime
+      ? (new Date(endTime) - new Date(booking.startTime)) / 60000
+      : 0;
+    const modeMultiplier = booking.chargingMode === 'eco' ? 0.8 : booking.chargingMode === 'boost' ? 1.2 : 1.0;
+    const finalAmount = Number(((durationMinutes / 60) * (booking.price || 5) * modeMultiplier).toFixed(2));
+    const payment = normalizePaymentOnCompletion(booking);
+
+    const updated = {
+      ...booking,
+      status: 'COMPLETED',
+      endTime,
+      durationMinutes: Number(durationMinutes.toFixed(2)),
+      finalAmount,
+      emergencyStopped: true,
+      emergencyStoppedBy: userId,
+      stopPin: null,
+      payment,
+      paymentStatus: payment.status,
+      paymentMethod: payment.method
+    };
+
+    if (!db || mockMode) {
+      await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
+    } else {
+      await db.collection('bookings').doc(bookingId).update({
+        status: 'COMPLETED',
+        endTime,
+        durationMinutes: updated.durationMinutes,
+        finalAmount,
+        emergencyStopped: true,
+        emergencyStoppedBy: userId,
+        stopPin: null,
+        payment,
+        paymentStatus: payment.status
+      });
+      await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
+    }
+
+    emitToUser(booking.userId, 'session_stopped', { booking: updated, finalAmount });
+    emitToHost(booking.hostId, 'session_stopped', { booking: redactPinsForHost(updated), finalAmount });
+
+    return res.json({ success: true, booking: redactPinsForHost(updated), finalAmount });
+  } catch (err) {
+    logger.error('emergencyStop failed', { err: err.message });
+    return res.status(500).json({ success: false, error: 'Emergency stop failed: ' + err.message });
+  }
+}
+
+async function changeMode(req, res) {
+  try {
+    const { bookingId, userId, mode } = req.body || {};
+    if (!bookingId || !userId || !mode) {
+      return res.status(400).json({ success: false, error: 'bookingId, userId, and mode are required' });
+    }
+
+    const validModes = ['eco', 'normal', 'boost'];
+    if (!validModes.includes(mode)) {
+      return res.status(400).json({ success: false, error: 'Mode must be eco, normal, or boost' });
+    }
+
+    const booking = await getBookingById(bookingId);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+
+    if (booking.userId !== userId) {
+      return res.status(403).json({ success: false, error: 'Only the charging user can change mode' });
+    }
+
+    if (booking.status !== 'STARTED') {
+      return res.status(400).json({ success: false, error: 'Session must be running to change mode' });
+    }
+
+    const updated = { ...booking, chargingMode: mode };
+    if (!db || mockMode) {
+      await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
+    } else {
+      await db.collection('bookings').doc(bookingId).update({ chargingMode: mode });
+      await cache.set(`booking:${bookingId}`, updated, 3600).catch(() => {});
+    }
+
+    emitToUser(booking.userId, 'mode_changed', { bookingId, mode });
+    emitToHost(booking.hostId, 'mode_changed', { bookingId, mode });
+
+    return res.json({ success: true, mode, booking: updated });
+  } catch (err) {
+    logger.error('changeMode failed', { err: err.message });
+    return res.status(500).json({ success: false, error: 'Failed to change charging mode' });
+  }
+}
+
 function registerRoutes(app) {
   const router = express.Router();
   router.post('/start', startSession);
   router.post('/stop', stopSession);
+  router.post('/session/emergency-stop', emergencyStop);
+  router.post('/session/mode', changeMode);
   app.use('/api', router);
 }
 

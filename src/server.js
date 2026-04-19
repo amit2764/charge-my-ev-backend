@@ -32,6 +32,7 @@ app.use(bodyParser.json());
 
 // Basic health
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // Register module routes
 if (authModule.registerRoutes) authModule.registerRoutes(app);

@@ -136,6 +136,48 @@ async function getBooking(req, res) {
   }
 }
 
+async function getBookingHistory(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
+
+    if (!db || mockMode) {
+      return res.json({ success: true, bookings: [] });
+    }
+
+    const [asUser, asHost] = await Promise.all([
+      db.collection('bookings')
+        .where('userId', '==', userId)
+        .where('status', '==', 'COMPLETED')
+        .orderBy('createdAt', 'desc')
+        .limit(30)
+        .get(),
+      db.collection('bookings')
+        .where('hostId', '==', userId)
+        .where('status', '==', 'COMPLETED')
+        .orderBy('createdAt', 'desc')
+        .limit(30)
+        .get()
+    ]);
+
+    const seen = new Set();
+    const bookings = [];
+    for (const snap of [asUser, asHost]) {
+      snap.docs.forEach(doc => {
+        if (!seen.has(doc.id)) {
+          seen.add(doc.id);
+          bookings.push({ id: doc.id, ...doc.data() });
+        }
+      });
+    }
+    bookings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return res.json({ success: true, bookings: bookings.slice(0, 50) });
+  } catch (err) {
+    logger.error('getBookingHistory failed', { err: err.message });
+    return res.status(500).json({ success: false, error: 'Failed to load booking history' });
+  }
+}
+
 async function getActiveBooking(req, res) {
   try {
     const { userId, role } = req.query || {};
@@ -184,6 +226,7 @@ function registerRoutes(app) {
   router.post('/book', createBooking);
   router.get('/booking/:id', getBooking);
   router.get('/bookings/active', getActiveBooking);
+  router.get('/bookings/history/:userId', getBookingHistory);
   app.use('/api', router);
 }
 

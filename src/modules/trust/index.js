@@ -2,6 +2,81 @@ const { db, mockMode } = require('../../lib/firestore');
 const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
 
+async function submitRating(req, res) {
+  try {
+    const { bookingId, userId, hostId, rating, review, aspects } = req.body || {};
+
+    if (!bookingId || !userId || !hostId || rating === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'bookingId, userId, hostId, and rating are required'
+      });
+    }
+
+    const numericRating = Number(rating);
+    if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({
+        success: false,
+        error: 'Rating must be between 1 and 5'
+      });
+    }
+
+    const ratingData = {
+      bookingId,
+      userId,
+      hostId,
+      rating: Math.round(numericRating),
+      review: review || '',
+      aspects: aspects || {},
+      createdAt: new Date().toISOString()
+    };
+
+    const ratingId = `${bookingId}_${userId}`;
+
+    if (!db || mockMode) {
+      global.mockRatings = global.mockRatings || new Map();
+      if (global.mockRatings.has(ratingId)) {
+        return res.status(409).json({ success: false, error: 'Rating already submitted for this booking' });
+      }
+      global.mockRatings.set(ratingId, ratingData);
+      await updateTrustForRating(userId, hostId, ratingData.rating);
+      return res.json({ success: true, rating: { id: ratingId, ...ratingData } });
+    }
+
+    const ratingRef = db.collection('ratings').doc(ratingId);
+    const existing = await ratingRef.get();
+    if (existing.exists) {
+      return res.status(409).json({ success: false, error: 'Rating already submitted for this booking' });
+    }
+
+    const bookingRef = db.collection('bookings').doc(bookingId);
+    const bookingSnap = await bookingRef.get();
+    if (!bookingSnap.exists) {
+      return res.status(404).json({ success: false, error: 'Booking not found' });
+    }
+
+    await Promise.all([
+      ratingRef.set(ratingData),
+      bookingRef.set(
+        {
+          hostRating: ratingData.rating,
+          hostReview: ratingData.review,
+          ratedAt: ratingData.createdAt,
+          updatedAt: ratingData.createdAt
+        },
+        { merge: true }
+      )
+    ]);
+
+    await updateTrustForRating(userId, hostId, ratingData.rating);
+
+    return res.json({ success: true, rating: { id: ratingId, ...ratingData } });
+  } catch (err) {
+    logger.error('submitRating failed', { err: err.message });
+    return res.status(500).json({ success: false, error: 'Failed to submit rating' });
+  }
+}
+
 async function getTrustProfile(userId) {
   const key = `trust:${userId}`;
   return cache.memoize(key, 300, async () => {
@@ -65,6 +140,7 @@ async function updateTrustForRating(userId, hostId, rating) {
 
 function registerRoutes(app) {
   const router = require('express').Router();
+  router.post('/rating', submitRating);
   router.get('/trust/:id', async (req, res) => {
     try {
       const profile = await getTrustProfile(req.params.id);

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from './store';
-import { Card, Input, Button } from './components';
+import { Card, Input, Button, Select } from './components';
 import api from './api';
 
 export default function UserProfile() {
   const { user, userProfile, setUserProfile } = useStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({ name: 'EV Owner', vehicleType: 'Tesla Model 3', location: null });
+  const [formData, setFormData] = useState({ name: 'EV Owner', vehicleType: 'Tata Nexon EV', connectorType: 'CCS2', location: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [trustData, setTrustData] = useState(null);
@@ -36,7 +36,7 @@ export default function UserProfile() {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setFormData({ ...formData, location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }),
-        (err) => setError('Could not access GPS.')
+        () => setError('Could not access GPS.')
       );
     }
   };
@@ -51,7 +51,7 @@ export default function UserProfile() {
       await new Promise(resolve => setTimeout(resolve, 600));
       setUserProfile(formData);
       setIsEditing(false);
-    } catch (err) {
+    } catch {
       setError('Failed to save profile. Please try again.');
     } finally { setLoading(false); }
   };
@@ -81,7 +81,18 @@ export default function UserProfile() {
         {isEditing ? (
           <div className="space-y-2">
             <Input label="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-            <Input label="Vehicle Model" value={formData.vehicleType} onChange={e => setFormData({...formData, vehicleType: e.target.value})} />
+            <Select
+              label="Vehicle Model"
+              value={formData.vehicleType}
+              onChange={e => setFormData({...formData, vehicleType: e.target.value})}
+              options={['Tata Nexon EV','Tata Tigor EV','MG ZS EV','Hyundai IONIQ 5','Kia EV6','Tesla Model 3','Tesla Model Y','Tesla Model S','Tesla Model X','BMW i4','Audi e-tron','Mahindra XUV400','Ola S1 Pro (2W)','Ather 450X (2W)','Other']}
+            />
+            <Select
+              label="Charging Port (Connector Type)"
+              value={formData.connectorType}
+              onChange={e => setFormData({...formData, connectorType: e.target.value})}
+              options={['Type 1 (J1772)','Type 2 (Mennekes)','CCS1','CCS2','CHAdeMO','GB/T','Bharat AC-001','Bharat DC-001']}
+            />
             <div className="flex items-end gap-2">
               <div className="flex-1"><Input label="Default GPS" value={formData.location ? `${formData.location.lat.toFixed(4)}, ${formData.location.lng.toFixed(4)}` : 'Not set'} disabled /></div>
               <Button variant="outline" className="mb-4 whitespace-nowrap" onClick={captureLocation}>📍 Get GPS</Button>
@@ -93,6 +104,7 @@ export default function UserProfile() {
             <div><p className="text-sm text-gray-500 font-semibold">Phone Number</p><p className="text-lg text-white">{user}</p></div>
             <div><p className="text-sm text-gray-500 font-semibold">Name</p><p className="text-lg text-white">{formData.name}</p></div>
             <div><p className="text-sm text-gray-500 font-semibold">Vehicle</p><p className="text-lg text-white">{formData.vehicleType}</p></div>
+            <div><p className="text-sm text-gray-500 font-semibold">Connector</p><p className="text-lg text-white">{formData.connectorType || 'CCS2'}</p></div>
           </div>
         )}
       </Card>

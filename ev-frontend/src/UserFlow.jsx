@@ -7,6 +7,20 @@ import './FlowVisuals.css';
 
 const FLOW_STEPS = ['Request', 'PIN', 'Charging', 'Payment', 'Done'];
 
+function readDismissedPaymentBookings() {
+  try {
+    const raw = localStorage.getItem('dismissedPaymentBookings');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissedPaymentBookings(ids) {
+  localStorage.setItem('dismissedPaymentBookings', JSON.stringify(ids));
+}
+
 function getFlowIndex(step, booking) {
   if (step === 'RATING') return 4;
   if (step === 'PAYMENT') return 3;
@@ -39,7 +53,28 @@ export default function UserFlow() {
   const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [dismissedPaymentBookings, setDismissedPaymentBookings] = useState(readDismissedPaymentBookings);
   const flowIndex = getFlowIndex(step, activeBooking);
+
+  const markPaymentBookingDismissed = (bookingId) => {
+    if (!bookingId) return;
+    setDismissedPaymentBookings(prev => {
+      if (prev.includes(bookingId)) return prev;
+      const next = [...prev, bookingId];
+      writeDismissedPaymentBookings(next);
+      return next;
+    });
+  };
+
+  const clearDismissedPaymentBooking = (bookingId) => {
+    if (!bookingId) return;
+    setDismissedPaymentBookings(prev => {
+      if (!prev.includes(bookingId)) return prev;
+      const next = prev.filter(id => id !== bookingId);
+      writeDismissedPaymentBookings(next);
+      return next;
+    });
+  };
 
   // Acceptance countdown timer (30 seconds for user to confirm)
   useEffect(() => {
@@ -122,8 +157,16 @@ export default function UserFlow() {
 
       // Move to rating only after full payment confirmation is complete.
       if (paymentStatus === 'CONFIRMED') {
+        clearDismissedPaymentBooking(bookingId);
         setStep('RATING');
       }
+    });
+
+    socket.on('mode_changed', ({ bookingId, mode }) => {
+      setActiveBooking(prev => {
+        if (!prev || prev.id !== bookingId) return prev;
+        return { ...prev, chargingMode: mode };
+      }, 'user');
     });
 
     return () => {
@@ -132,9 +175,10 @@ export default function UserFlow() {
       socket.off('session_started');
       socket.off('session_stopped');
       socket.off('payment_update');
+      socket.off('mode_changed');
       socket.disconnect();
     };
-  }, []);
+  }, [setActiveBooking]);
 
   useEffect(() => {
     const recover = async () => {
@@ -148,6 +192,20 @@ export default function UserFlow() {
       try {
         const res = await api.get(`/api/bookings/active?userId=${encodeURIComponent(user)}&role=user`);
         const booking = res.data?.booking;
+        const status = String(booking?.status || '').toUpperCase();
+        const paymentStatus = String(booking?.paymentStatus || 'PENDING').toUpperCase();
+
+        if (
+          booking &&
+          status === 'COMPLETED' &&
+          paymentStatus !== 'CONFIRMED' &&
+          dismissedPaymentBookings.includes(booking.id)
+        ) {
+          setActiveBooking(null, 'user');
+          setStep('REQUEST');
+          return;
+        }
+
         if (booking) {
           setActiveBooking(booking, 'user');
           setStep(deriveUserStep(booking));
@@ -158,7 +216,7 @@ export default function UserFlow() {
     };
 
     recover();
-  }, [user, activeBooking, setActiveBooking]);
+  }, [user, activeBooking, setActiveBooking, dismissedPaymentBookings]);
 
   // Fallback sync for payment state in case socket event is missed.
   useEffect(() => {
@@ -279,6 +337,41 @@ export default function UserFlow() {
     } finally { setLoading(false); }
   };
 
+  const emergencyStop = async () => {
+    if (!window.confirm('Stop the session immediately without a PIN? This cannot be undone.')) return;
+    setLoading(true); setError('');
+    try {
+      let res;
+      try {
+        res = await api.post('/api/session/emergency-stop', { bookingId: activeBooking.id, userId: user });
+      } catch (primaryErr) {
+        // Backward compatibility: older backend exposes only /api/stop with stopPin.
+        if (primaryErr?.response?.status === 404 && activeBooking?.stopPin) {
+          res = await api.post('/api/stop', { bookingId: activeBooking.id, otp: activeBooking.stopPin });
+        } else {
+          throw primaryErr;
+        }
+      }
+      if (res.data?.booking) {
+        setActiveBooking({ ...res.data.booking, finalAmount: res.data.finalAmount }, 'user');
+      }
+      setStep('PAYMENT');
+    } catch (err) {
+      setError('Emergency stop failed: ' + (err.response?.data?.error || err.message));
+    } finally { setLoading(false); }
+  };
+
+  const changeMode = async (mode) => {
+    if (activeBooking?.chargingMode === mode) return;
+    setLoading(true); setError('');
+    try {
+      await api.post('/api/session/mode', { bookingId: activeBooking.id, userId: user, mode });
+      setActiveBooking(prev => prev ? { ...prev, chargingMode: mode } : prev, 'user');
+    } catch (err) {
+      setError('Mode change failed: ' + (err.response?.data?.error || err.message));
+    } finally { setLoading(false); }
+  };
+
   const submitRating = async () => {
     setLoading(true); setError('');
     try {
@@ -287,6 +380,15 @@ export default function UserFlow() {
     } catch (err) { 
       setError('Failed to submit rating: ' + (err.response?.data?.error || err.message)); 
     } finally { setLoading(false); }
+  };
+
+  const dismissPaymentWait = () => {
+    markPaymentBookingDismissed(activeBooking?.id);
+    setActiveBooking(null, 'user');
+    setActiveRequest(null);
+    setHosts([]);
+    setElapsedSeconds(0);
+    setStep('REQUEST');
   };
 
   // Formatting helpers
@@ -437,6 +539,35 @@ export default function UserFlow() {
                 </p>
               </div>
               <p className="text-xs text-gray-400">Show this PIN to your host when done charging.</p>
+
+              {/* ── Charging mode toggle ── */}
+              <div className="mt-5">
+                <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Charging Mode</p>
+                <div className="flex gap-2 justify-center">
+                  {[{ id: 'eco', label: '🌿 Eco', hint: '−20%' }, { id: 'normal', label: '⚡ Normal', hint: '×1' }, { id: 'boost', label: '🚀 Boost', hint: '+20%' }].map(({ id, label, hint }) => {
+                    const active = (activeBooking.chargingMode || 'normal') === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => changeMode(id)}
+                        disabled={loading}
+                        className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${active ? 'border-cyan-500 bg-cyan-900/40 text-cyan-300' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                      >
+                        {label}<br /><span className="text-xs opacity-70">{hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Emergency stop ── */}
+              <button
+                onClick={emergencyStop}
+                disabled={loading}
+                className="mt-5 w-full py-3 rounded-lg bg-red-900/60 border-2 border-red-700 text-red-400 font-semibold text-sm hover:bg-red-800/60 transition-all disabled:opacity-50"
+              >
+                ⛔ Emergency Stop (no PIN)
+              </button>
             </Card>
           )}
         </div>
@@ -471,6 +602,11 @@ export default function UserFlow() {
             <Button onClick={payCash} disabled={loading || activeBooking.payment?.userConfirmed || activeBooking.paymentStatus === 'CONFIRMED'}>
               {loading ? 'Processing...' : (activeBooking.payment?.userConfirmed ? 'Cash Marked Paid' : 'I Paid Cash')}
             </Button>
+            {activeBooking.payment?.userConfirmed && activeBooking.paymentStatus !== 'CONFIRMED' && (
+              <Button variant="outline" className="mt-3" onClick={dismissPaymentWait}>
+                Exit For Now
+              </Button>
+            )}
             <Button variant="outline" className="mt-3" disabled>Pay Online (Soon)</Button>
           </Card>
         </div>

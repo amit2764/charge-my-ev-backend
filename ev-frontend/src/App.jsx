@@ -24,8 +24,11 @@ export default function App() {
   useEffect(() => {
     if (!isSessionLocked || !activeBookingRole || role === activeBookingRole) return;
     setRole(activeBookingRole);
-    setActiveTab(activeBookingRole === 'host' ? 'dashboard' : 'charge');
   }, [isSessionLocked, activeBookingRole, role, setRole]);
+
+  const effectiveTab = isSessionLocked && activeBookingRole
+    ? (activeBookingRole === 'host' ? 'dashboard' : 'charge')
+    : activeTab;
 
   const switchRole = (nextRole) => {
     if (isSessionLocked && activeBookingRole && nextRole !== activeBookingRole) {
@@ -72,15 +75,15 @@ export default function App() {
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {role === 'user' ? (
           <>
-            {activeTab === 'charge' && <UserFlow />}
-            {activeTab === 'history' && <UserHistory />}
-            {activeTab === 'profile' && <UserProfile />}
+            {effectiveTab === 'charge' && <UserFlow />}
+            {effectiveTab === 'history' && <UserHistory />}
+            {effectiveTab === 'profile' && <UserProfile />}
           </>
         ) : (
           <>
-            {activeTab === 'dashboard' && <HostFlow />}
-            {activeTab === 'earnings' && <HostEarnings />}
-            {activeTab === 'profile' && <UserProfile />}
+            {effectiveTab === 'dashboard' && <HostFlow />}
+            {effectiveTab === 'earnings' && <HostEarnings />}
+            {effectiveTab === 'profile' && <UserProfile />}
           </>
         )}
       </div>
@@ -89,16 +92,16 @@ export default function App() {
       <div className="absolute bottom-0 w-full bg-black/80 backdrop-blur-lg border-t border-gray-800 flex">
         {role === 'user' ? (
           <>
-            <button onClick={() => setActiveTab('charge')} className={`flex-1 py-4 font-bold text-sm transition ${activeTab === 'charge' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>⚡ Charge</button>
-            <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 font-bold text-sm transition ${activeTab === 'history' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>🕒 History</button>
+            <button onClick={() => setActiveTab('charge')} className={`flex-1 py-4 font-bold text-sm transition ${effectiveTab === 'charge' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>⚡ Charge</button>
+            <button onClick={() => setActiveTab('history')} className={`flex-1 py-4 font-bold text-sm transition ${effectiveTab === 'history' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>🕒 History</button>
           </>
         ) : (
           <>
-            <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-4 font-bold text-sm transition ${activeTab === 'dashboard' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>🏠 Dashboard</button>
-            <button onClick={() => setActiveTab('earnings')} className={`flex-1 py-4 font-bold text-sm transition ${activeTab === 'earnings' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>💰 Earnings</button>
+            <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-4 font-bold text-sm transition ${effectiveTab === 'dashboard' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>🏠 Dashboard</button>
+            <button onClick={() => setActiveTab('earnings')} className={`flex-1 py-4 font-bold text-sm transition ${effectiveTab === 'earnings' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>💰 Earnings</button>
           </>
         )}
-        <button onClick={() => setActiveTab('profile')} className={`flex-1 py-4 font-bold text-sm transition ${activeTab === 'profile' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>👤 Profile</button>
+        <button onClick={() => setActiveTab('profile')} className={`flex-1 py-4 font-bold text-sm transition ${effectiveTab === 'profile' ? 'text-cyan-400 border-t-2 border-cyan-400' : 'text-gray-500 hover:text-gray-300'}`}>👤 Profile</button>
       </div>
       
     </div>

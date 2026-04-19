@@ -17,7 +17,7 @@ export default function HostEarnings() {
           setSessions(res.data.sessions);
         }
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Failed to load earning history.');
         setLoading(false);
       }

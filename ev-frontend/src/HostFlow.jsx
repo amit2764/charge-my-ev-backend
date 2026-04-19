@@ -41,7 +41,7 @@ export default function HostFlow() {
 
   useEffect(() => {
     if (hostProfile && price === '5.00') setPrice(hostProfile.pricePerHour);
-  }, [hostProfile]);
+  }, [hostProfile, price]);
 
   // Acceptance countdown timer - shows how long user has to confirm
   useEffect(() => {

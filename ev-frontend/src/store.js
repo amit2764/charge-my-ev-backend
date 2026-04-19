@@ -9,11 +9,22 @@ function readJson(key, fallback) {
   }
 }
 
+async function hashPin(pin) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + 'ev_charge_pin_v1');
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // User Store for EV Frontend
 export const useStore = create((set, get) => ({
   // Auth
   user: localStorage.getItem('user') || null,
   role: localStorage.getItem('role') || 'user', // 'user' or 'host'
+
+  // Quick-login credentials (device-local)
+  pinHash: localStorage.getItem('pinHash') || null,
+  biometricCredentialId: localStorage.getItem('biometricCredentialId') || null,
 
   // Profiles
   userProfile: readJson('userProfile', null),
@@ -36,6 +47,28 @@ export const useStore = create((set, get) => ({
   setRole: (role) => {
     localStorage.setItem('role', role);
     set({ role });
+  },
+
+  setPin: async (pin) => {
+    const hash = await hashPin(pin);
+    localStorage.setItem('pinHash', hash);
+    set({ pinHash: hash });
+  },
+
+  verifyPin: async (pin) => {
+    const hash = await hashPin(pin);
+    return hash === get().pinHash;
+  },
+
+  clearPin: () => {
+    localStorage.removeItem('pinHash');
+    localStorage.removeItem('biometricCredentialId');
+    set({ pinHash: null, biometricCredentialId: null });
+  },
+
+  setBiometricCredentialId: (id) => {
+    localStorage.setItem('biometricCredentialId', id);
+    set({ biometricCredentialId: id });
   },
 
   setUserProfile: (profile) => {
@@ -87,6 +120,7 @@ export const useStore = create((set, get) => ({
     localStorage.removeItem('role');
     localStorage.removeItem('userProfile');
     localStorage.removeItem('hostProfile');
+    // Keep PIN and biometric on logout so quick-login works on next open
     set({
       user: null,
       role: 'user',

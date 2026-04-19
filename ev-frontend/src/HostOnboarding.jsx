@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useStore } from './store';
-import { Card, Input, Button } from './components';
+import { Card, Input, Button, Select } from './components';
 
 export default function HostOnboarding() {
   const { setHostProfile } = useStore();
   const [formData, setFormData] = useState({
     address: '',
     landmark: '',
-    chargerType: 'Level 2 (7kW)',
+    chargerType: 'Level 2 ~7.2kW',
+    connectorType: 'CCS2',
     pricePerHour: '15.00',
     location: null
   });
@@ -18,7 +19,7 @@ export default function HostOnboarding() {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setFormData({ ...formData, location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }),
-        (err) => setError('Could not access GPS. Please ensure location services are enabled.')
+        () => setError('Could not access GPS. Please ensure location services are enabled.')
       );
     } else {
       setError('Geolocation is not supported by your browser.');
@@ -31,7 +32,7 @@ export default function HostOnboarding() {
       // In production: await api.post('/api/hosts', formData);
       await new Promise(resolve => setTimeout(resolve, 800));
       setHostProfile({ ...formData, isActive: true });
-    } catch (err) {
+    } catch {
       setError('Failed to save your host profile. Please check your network and try again.');
     } finally {
       setLoading(false);
@@ -57,7 +58,18 @@ export default function HostOnboarding() {
 
         <Input label="Charger Address" placeholder="123 Main St, City" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
         <Input label="Landmark (Optional)" placeholder="Near the blue gate" value={formData.landmark} onChange={e => setFormData({...formData, landmark: e.target.value})} />
-        <Input label="Charger Type & Speed" placeholder="e.g. Level 2 (7kW)" value={formData.chargerType} onChange={e => setFormData({...formData, chargerType: e.target.value})} />
+        <Select
+          label="Charger Power Level"
+          value={formData.chargerType}
+          onChange={e => setFormData({...formData, chargerType: e.target.value})}
+          options={['Level 1 ~3.3kW','Level 2 ~7.2kW','Level 2 Fast ~22kW','DC Fast ~50kW','DC Ultra-Fast 150kW+']}
+        />
+        <Select
+          label="Connector Type"
+          value={formData.connectorType}
+          onChange={e => setFormData({...formData, connectorType: e.target.value})}
+          options={['Type 1 (J1772)','Type 2 (Mennekes)','CCS1','CCS2','CHAdeMO','GB/T','Bharat AC-001','Bharat DC-001']}
+        />
         <Input label="Price Per Hour ($)" type="number" placeholder="15.00" value={formData.pricePerHour} onChange={e => setFormData({...formData, pricePerHour: e.target.value})} />
         <Button onClick={handleSubmit} disabled={loading || !formData.address} className="mt-4">{loading ? 'Saving...' : 'Start Earning'}</Button>
       </Card>

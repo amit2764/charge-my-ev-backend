@@ -246,6 +246,9 @@ async function respondToRequest(req, res) {
       });
     }
 
+    // Keep compatibility with clients that render a live host list.
+    emitToRequest(requestId, 'response_update', { action: 'added', response });
+
     // Emit to user and other hosts that this request is now taken
     emitToRequest(requestId, 'request_accepted', {
       requestId,
