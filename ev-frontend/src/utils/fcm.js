@@ -36,7 +36,6 @@ async function registerServiceWorker() {
 
 export async function getFCMToken() {
   if (!VAPID_KEY) {
-    console.warn('[FCM] VITE_FCM_VAPID_KEY is not configured, skipping FCM.');
     return null;
   }
 
