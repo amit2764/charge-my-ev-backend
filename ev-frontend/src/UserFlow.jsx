@@ -16,6 +16,7 @@ import usePromoCode from './hooks/usePromoCode';
 import VerifiedBadge from './components/VerifiedBadge';
 
 const FLOW_STEPS = ['Request', 'PIN', 'Charging', 'Payment', 'Done'];
+const UI_REFRESH_TAG = 'UI Refresh 2026-04-21';
 
 function readPendingPaymentBookingId() {
   try {
@@ -814,15 +815,22 @@ export default function UserFlow() {
 
       {step === 'REQUEST' && (
         <div className="space-y-4">
-          <div className="glass-surface overflow-hidden rounded-[28px] p-5">
-            <div className="flex items-center justify-between gap-3">
+          <div className="overflow-hidden rounded-[28px] border border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-blue-500/12 to-slate-900/70 p-5 shadow-[0_20px_60px_rgba(34,211,238,0.18)]">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Screen 1</p>
-                <h2 className="mt-1 text-2xl font-black text-white">Request Charge</h2>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">Screen 1</p>
+                <h2 className="mt-1 text-3xl font-black tracking-[-0.03em] text-white">Request Charge</h2>
+                <p className="mt-3 max-w-sm text-sm text-cyan-50/85">Find a nearby host with live pricing, verified identity badges, and minimal waiting time.</p>
               </div>
-              <span className="floating-chip"><span className="live-dot" /> Auto locate</span>
+              <span className="rounded-full border border-cyan-300/40 bg-cyan-400/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+                {UI_REFRESH_TAG}
+              </span>
             </div>
-            <p className="mt-3 max-w-sm text-sm text-slate-400">Find a nearby host with live pricing, verified identity badges, and minimal waiting time.</p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="floating-chip"><span className="live-dot" /> Auto locate</span>
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-100">Fastest first-match routing</span>
+              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-100">Realtime availability scan</span>
+            </div>
           </div>
           {activeBooking?.status === 'COMPLETED' && isPendingPaymentStatus(activeBooking?.paymentStatus) && (
             <Card className="border border-amber-700 bg-amber-900/20">
@@ -830,28 +838,28 @@ export default function UserFlow() {
               <Button className="mt-3" onClick={() => setStep('PAYMENT')}>Resume Payment</Button>
             </Card>
           )}
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden border border-cyan-500/20 bg-slate-950/70">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Smart request</p>
-                <h3 className="mt-1 text-lg font-bold text-white">Step-based trip setup</h3>
+                <h3 className="mt-1 text-lg font-bold text-white">Instant trip setup</h3>
               </div>
-              <div className="rounded-[18px] bg-white/5 px-3 py-2 text-right">
+              <div className="rounded-[18px] border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-right">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Vehicle</p>
                 <p className="text-sm font-bold text-cyan-300">EV Ready</p>
               </div>
             </div>
             <Input label="Vehicle Type" value={userProfile?.vehicleType || 'Electric Sedan'} disabled />
-            <Button onClick={handleSearchHosts} disabled={loading}>{loading ? 'Locating & Searching...' : '📍 Auto-Locate & Search'}</Button>
-                    <PromoCodeInput
-                      code={promoCode}
-                      onCodeChange={setPromoCode}
-                      onValidate={validateCode}
-                      validating={validating}
-                      error={promoError}
-                      discount={discount}
-                      appliedCode={appliedCode}
-                    />
+            <Button onClick={handleSearchHosts} disabled={loading}>{loading ? 'Scanning Nearby Hosts...' : 'Start Smart Search'}</Button>
+            <PromoCodeInput
+              code={promoCode}
+              onCodeChange={setPromoCode}
+              onValidate={validateCode}
+              validating={validating}
+              error={promoError}
+              discount={discount}
+              appliedCode={appliedCode}
+            />
           </Card>
         </div>
       )}
