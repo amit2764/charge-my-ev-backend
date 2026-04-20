@@ -18,7 +18,9 @@ const NOTIFICATION_TYPES = {
   SESSION_STOPPED: 'session_stopped',
   PAYMENT_CONFIRMATION_REQUIRED: 'payment_confirmation_required',
   PAYMENT_DISPUTE: 'payment_dispute',
-  PAYMENT_RESOLVED: 'payment_resolved'
+  PAYMENT_RESOLVED: 'payment_resolved',
+  PAYMENT_AUTO_RESOLVED: 'payment_auto_resolved',
+  SESSION_ORPHANED: 'session_orphaned'
 };
 
 /**

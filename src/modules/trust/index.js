@@ -1,6 +1,7 @@
 const { db, mockMode } = require('../../lib/firestore');
 const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
+const { requireAuth } = require('../../middleware/auth');
 
 async function submitRating(req, res) {
   try {
@@ -140,8 +141,8 @@ async function updateTrustForRating(userId, hostId, rating) {
 
 function registerRoutes(app) {
   const router = require('express').Router();
-  router.post('/rating', submitRating);
-  router.get('/trust/:id', async (req, res) => {
+  router.post('/rating', requireAuth, submitRating);
+  router.get('/trust/:id', requireAuth, async (req, res) => {
     try {
       const profile = await getTrustProfile(req.params.id);
       res.json({ success: true, profile });

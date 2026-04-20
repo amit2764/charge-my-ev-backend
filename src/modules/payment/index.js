@@ -3,6 +3,7 @@ const { db, mockMode } = require('../../lib/firestore');
 const cache = require('../../lib/cache');
 const logger = require('../../lib/logger');
 const { emitToUser, emitToHost } = require('../../realtime');
+const { requireAuth } = require('../../middleware/auth');
 
 async function getBooking(bookingId) {
   const cached = await cache.get(`booking:${bookingId}`).catch(() => null);
@@ -20,7 +21,7 @@ function normalizePaymentState(booking = {}) {
     method: current.method || 'cash',
     userConfirmed: !!current.userConfirmed,
     hostConfirmed: !!current.hostConfirmed,
-    status: current.status || 'PENDING',
+    status: current.status || (current.userConfirmed && current.hostConfirmed ? 'CONFIRMED' : current.userConfirmed ? 'USER_CONFIRMED' : current.hostConfirmed ? 'HOST_CONFIRMED' : 'PENDING'),
     confirmedAt: current.confirmedAt || null,
     userConfirmedAt: current.userConfirmedAt || null,
     hostConfirmedAt: current.hostConfirmedAt || null
@@ -69,6 +70,12 @@ async function confirmPayment(req, res) {
       if (payment.userConfirmed && payment.hostConfirmed) {
         payment.status = 'CONFIRMED';
         payment.confirmedAt = now;
+      } else if (payment.userConfirmed) {
+        payment.status = 'USER_CONFIRMED';
+      } else if (payment.hostConfirmed) {
+        payment.status = 'HOST_CONFIRMED';
+      } else {
+        payment.status = 'PENDING';
       }
 
       const booking = {
@@ -112,6 +119,10 @@ async function confirmPayment(req, res) {
       if (payment.userConfirmed && payment.hostConfirmed) {
         payment.status = 'CONFIRMED';
         payment.confirmedAt = now;
+      } else if (payment.userConfirmed) {
+        payment.status = 'USER_CONFIRMED';
+      } else if (payment.hostConfirmed) {
+        payment.status = 'HOST_CONFIRMED';
       } else {
         payment.status = 'PENDING';
       }
@@ -198,9 +209,9 @@ async function getPaymentStatus(req, res) {
 
 function registerRoutes(app) {
   const router = express.Router();
-  router.post('/payments/create-order', createPaymentOrder);
-  router.post('/payment/confirm', confirmPayment);
-  router.get('/payment/:bookingId/status', getPaymentStatus);
+  router.post('/payments/create-order', requireAuth, createPaymentOrder);
+  router.post('/payment/confirm', requireAuth, confirmPayment);
+  router.get('/payment/:bookingId/status', requireAuth, getPaymentStatus);
   app.use('/api', router);
 }
 

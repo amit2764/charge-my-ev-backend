@@ -56,8 +56,12 @@ if (ProfilingIntegration) {
 }
 
 // Initialize Sentry as early as possible
+if (!process.env.SENTRY_DSN && process.env.NODE_ENV === 'production') {
+  console.warn('[WARN] SENTRY_DSN is not set. Error monitoring is disabled in production. Set SENTRY_DSN in Railway environment variables.');
+}
+
 Sentry.init({
-  dsn: process.env.SENTRY_DSN, // Add this to your .env file
+  dsn: process.env.SENTRY_DSN || undefined, // Set SENTRY_DSN in Railway env vars
   integrations: sentryIntegrations,
   tracesSampleRate: 1.0,
   profilesSampleRate: 1.0,

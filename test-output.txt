@@ -1,0 +1,407 @@
+﻿  console.log
+    Initializing Firebase Admin...
+
+      at Object.log (src/config/firebase.js:56:11)
+
+  console.log
+    - Project ID: ev-p2p
+
+      at Object.log (src/config/firebase.js:57:11)
+
+  console.log
+    - Credentials source: key.json
+
+      at Object.log (src/config/firebase.js:58:11)
+
+  console.log
+    Firestore initialized successfully.
+
+      at Object.log (src/config/firebase.js:73:11)
+
+{"error":"Firestore transactions require all reads to be executed before all writes.","level":"error","message":"submitRating failed","timestamp":"2026-04-20T16:08:05.162Z"}
+{"error":"Firestore transactions require all reads to be executed before all writes.","level":"error","message":"submitRating failed","timestamp":"2026-04-20T16:08:05.237Z"}
+{"error":"Firestore transactions require all reads to be executed before all writes.","level":"error","message":"submitRating failed","timestamp":"2026-04-20T16:08:05.338Z"}
+node.exe : FAIL src/api/__tests__/bookings.test.js
+At C:\Program Files\nodejs\npx.ps1:29 char:3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL src/api/__tests__/bookings.t 
+   est.js:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  /api/bookings/active
+    ΓêÜ returns active booking when STARTED exists for the user (630 ms)
+    ΓêÜ returns null when no active booking exists (37 ms)
+    ΓêÜ returns STARTED booking when payment status is USER_CONFIRMED (43 ms)
+    ΓêÜ returns STARTED booking when payment status is HOST_CONFIRMED (48 ms)
+    ΓêÜ returns 400 when userId is missing (35 ms)
+  /api/bookings/:id/payment-confirm
+    ΓêÜ sets payment.userConfirmed to true for user confirmation (121 ms)
+    ΓêÜ sets payment status to USER_CONFIRMED when host has not confirmed (73 
+ms)
+    ΓêÜ sets payment status to CONFIRMED when host already confirmed (87 ms)
+    ΓêÜ sets booking status to COMPLETED when payment becomes confirmed from 
+user side (74 ms)
+    ΓêÜ returns 400 when booking status is not STARTED (53 ms)
+    ├ù returns 400 when user already confirmed payment (54 ms)
+    ΓêÜ sets payment.hostConfirmed to true for host confirmation (60 ms)
+    ΓêÜ sets payment status to HOST_CONFIRMED when user has not confirmed (67 
+ms)
+    ΓêÜ sets payment status to CONFIRMED when user already confirmed (64 ms)
+    ΓêÜ sets booking status to COMPLETED when payment becomes confirmed from 
+host side (49 ms)
+    ΓêÜ returns 400 for host when booking status is not STARTED (55 ms)
+    ├ù returns 400 when host already confirmed payment (71 ms)
+  /api/requests
+    ΓêÜ returns 403 BLOCKED when user is in host block list (56 ms)
+    ΓêÜ returns 400 OUTSIDE_SCHEDULE when charger schedule is unavailable (30 
+ms)
+    ├ù returns 409 when host already has a CONFIRMED or STARTED booking (81 ms)
+    ├ù returns 409 when user already has an active booking (72 ms)
+    ├ù creates a booking document with status REQUEST on success (63 ms)
+    ΓêÜ returns 400 when required fields are missing (13 ms)
+  /api/ratings
+    ├ù saves rating document to Firestore (54 ms)
+    ├ù updates aggregate rating as a rolling average (72 ms)
+    ├ù returns 409 when rating already submitted for the booking by the same 
+user (58 ms)
+    ├ù returns 400 when booking status is not COMPLETED (41 ms)
+
+  ΓùÅ /api/bookings/:id/payment-confirm ΓÇ║ returns 400 when user already 
+confirmed payment
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 200
+
+    [0m [90m 333 |[39m
+     [90m 334 |[39m     [36mconst[39m response [33m=[39m [36mawait[39m 
+request(app)[33m.[39mpost([32m'/api/bookings/booking-b11/payment-confirm'[3
+9m)[33m.[39msend({ role[33m:[39m [32m'user'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 335 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 336 |[39m   })[33m;[39m
+     [90m 337 |[39m
+     [90m 338 |[39m   test([32m'sets payment.hostConfirmed to true for host 
+confirmation'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:335:29)
+
+  ΓùÅ /api/bookings/:id/payment-confirm ΓÇ║ returns 400 when host already 
+confirmed payment
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 200
+
+    [0m [90m 433 |[39m
+     [90m 434 |[39m     [36mconst[39m response [33m=[39m [36mawait[39m 
+request(app)[33m.[39mpost([32m'/api/bookings/booking-b17/payment-confirm'[3
+9m)[33m.[39msend({ role[33m:[39m [32m'host'[39m })[33m;[39m
+    [31m[1m>[22m[39m[90m 435 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 436 |[39m   })[33m;[39m
+     [90m 437 |[39m })[33m;[39m
+     [90m 438 |[39m[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:435:29)
+
+  ΓùÅ /api/requests ΓÇ║ returns 409 when host already has a CONFIRMED or 
+STARTED booking
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 200
+
+    [0m [90m 516 |[39m     })[33m;[39m
+     [90m 517 |[39m
+    [31m[1m>[22m[39m[90m 518 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 519 |[39m   })[33m;[39m
+     [90m 520 |[39m
+     [90m 521 |[39m   test([32m'returns 409 when user already has an active 
+booking'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:518:29)
+
+  ΓùÅ /api/requests ΓÇ║ returns 409 when user already has an active booking
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 200
+
+    [0m [90m 543 |[39m     })[33m;[39m
+     [90m 544 |[39m
+    [31m[1m>[22m[39m[90m 545 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 546 |[39m   })[33m;[39m
+     [90m 547 |[39m
+     [90m 548 |[39m   test([32m'creates a booking document with status 
+REQUEST on success'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:545:29)
+
+  ΓùÅ /api/requests ΓÇ║ creates a booking document with status REQUEST on 
+success
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+    [0m [90m 564 |[39m     [36mconst[39m bookingsSnap [33m=[39m 
+[36mawait[39m db[33m.[39mcollection([32m'bookings'[39m)[33m.[39mwhere(
+[32m'userId'[39m[33m,[39m [32m'=='[39m[33m,[39m 
+[32m'user-b22'[39m)[33m.[39m[36mget[39m()[33m;[39m
+     [90m 565 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 566 |[39m     
+expect(bookingsSnap[33m.[39mempty)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+     [90m     |[39m                                [31m[1m^[22m[39m
+     [90m 567 |[39m     expect(bookingsSnap[33m.[39mdocs[[35m0[39m][33m.
+[39mdata()[33m.[39mstatus)[33m.[39mtoBe([32m'REQUEST'[39m)[33m;[39m
+     [90m 568 |[39m   })[33m;[39m
+     [90m 569 |[39m[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:566:32)
+
+  ΓùÅ /api/ratings ΓÇ║ saves rating document to Firestore
+
+    expected 200 "OK", got 500 "Internal Server Error"
+
+    [0m [90m 606 |[39m       stars[33m:[39m [35m5[39m[33m,[39m
+     [90m 607 |[39m       comment[33m:[39m [32m'Great session'[39m
+    [31m[1m>[22m[39m[90m 608 |[39m     
+})[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m        [31m[1m^[22m[39m
+     [90m 609 |[39m
+     [90m 610 |[39m     [36mconst[39m ratingSnap [33m=[39m 
+[36mawait[39m db[33m.[39mcollection([32m'ratings'[39m)[33m.[39mdoc([32
+m'booking-b24_user-b24'[39m)[33m.[39m[36mget[39m()[33m;[39m
+     [90m 611 |[39m     expect(ratingSnap[33m.[39mexists)[33m.[39mtoBe([
+36mtrue[39m)[33m;[39m[0m
+
+      at Object.expect (src/api/__tests__/bookings.test.js:608:8)
+      ----
+  console.log
+    Initializing Firebase Admin...
+
+      at Object.log (src/config/firebase.js:56:11)
+
+  console.log
+    - Project ID: ev-p2p
+
+      at Object.log (src/config/firebase.js:57:11)
+
+  console.log
+    - Credentials source: key.json
+
+      at Object.log (src/config/firebase.js:58:11)
+
+      at Test._assertStatus (node_modules/supertest/lib/test.js:309:14)
+      at node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (node_modules/supertest/lib/test.js:195:23)
+      at localAssert (node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (node_modules/supertest/lib/test.js:152:11)
+
+  ΓùÅ /api/ratings ΓÇ║ updates aggregate rating as a rolling average
+
+    expected 200 "OK", got 500 "Internal Server Error"
+
+    [0m [90m 634 |[39m       stars[33m:[39m [35m5[39m[33m,[39m
+     [90m 635 |[39m       comment[33m:[39m [32m'Very good'[39m
+    [31m[1m>[22m[39m[90m 636 |[39m     
+})[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m        [31m[1m^[22m[39m
+     [90m 637 |[39m
+     [90m 638 |[39m     [36mconst[39m hostSnap [33m=[39m [36mawait[39m 
+db[33m.[39mcollection([32m'users'[39m)[33m.[39mdoc([32m'host-b25'[39m)
+[33m.[39m[36mget[39m()[33m;[39m
+     [90m 639 |[39m     expect(hostSnap[33m.[39mdata()[33m.[39mrating)[3
+3m.[39mtoBe([35m4.5[39m)[33m;[39m[0m
+
+      at Object.expect (src/api/__tests__/bookings.test.js:636:8)
+      ----
+      at Test._assertStatus (node_modules/supertest/lib/test.js:309:14)
+      at node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (node_modules/supertest/lib/test.js:195:23)
+      at localAssert (node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (node_modules/supertest/lib/test.js:152:11)
+
+  ΓùÅ /api/ratings ΓÇ║ returns 409 when rating already submitted for the 
+booking by the same user
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 409
+    Received: 200
+
+    [0m [90m 669 |[39m     })[33m;[39m
+     [90m 670 |[39m
+    [31m[1m>[22m[39m[90m 671 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m409[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 672 |[39m   })[33m;[39m
+     [90m 673 |[39m
+     [90m 674 |[39m   test([32m'returns 400 when booking status is not 
+COMPLETED'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:671:29)
+
+  ΓùÅ /api/ratings ΓÇ║ returns 400 when booking status is not COMPLETED
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 692 |[39m     })[33m;[39m
+     [90m 693 |[39m
+    [31m[1m>[22m[39m[90m 694 |[39m     
+expect(response[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                             [31m[1m^[22m[39m
+     [90m 695 |[39m   })[33m;[39m
+     [90m 696 |[39m })[33m;[39m
+     [90m 697 |[39m[0m
+
+      at Object.toBe (src/api/__tests__/bookings.test.js:694:29)
+
+  console.log
+    Firestore initialized successfully.
+
+      at Object.log (src/config/firebase.js:73:11)
+
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":1,"scannedCount":1,"timestamp":"2026-04-20T16:08:05.719Z"}
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":1,"scannedCount":1,"timestamp":"2026-04-20T16:08:05.801Z"}
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":1,"scannedCount":1,"timestamp":"2026-04-20T16:08:05.891Z"}
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":1,"scannedCount":1,"timestamp":"2026-04-20T16:08:05.961Z"}
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":0,"scannedCount":0,"timestamp":"2026-04-20T16:08:06.003Z"}
+{"level":"info","message":"resolveStuckPayments run complete","resolvedCount":0,"scannedCount":1,"timestamp":"2026-04-20T16:08:06.076Z"}
+FAIL src/jobs/__tests__/resolveStuckPayments.test.js
+  resolveStuckPayments
+    ├ù auto-confirms when only the user confirmed and session ended over 30 
+minutes ago (227 ms)
+    ├ù moves to support when only the host confirmed and session ended over 30 
+minutes ago (94 ms)
+    ├ù expires payment when neither side confirmed and session ended over 30 
+minutes ago (81 ms)
+    ├ù marks orphaned sessions for support after five hours (72 ms)
+    ΓêÜ does not modify a booking that already has autoResolvedAt (42 ms)
+    ΓêÜ does not modify a booking under the 30 minute threshold (73 ms)
+
+  ΓùÅ resolveStuckPayments ΓÇ║ auto-confirms when only the user confirmed and 
+session ended over 30 minutes ago
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "CONFIRMED"
+    Received: "USER_CONFIRMED"
+
+    [0m [90m 134 |[39m
+     [90m 135 |[39m     [36mconst[39m snap [33m=[39m [36mawait[39m db[
+33m.[39mcollection([32m'bookings'[39m)[33m.[39mdoc([32m'booking-c01'[39m
+)[33m.[39m[36mget[39m()[33m;[39m
+    [31m[1m>[22m[39m[90m 136 |[39m     expect(snap[33m.[39mdata()[33m.
+[39mpayment[33m.[39mstatus)[33m.[39mtoBe([32m'CONFIRMED'[39m)[33m;[39m
+     [90m     |[39m                                        
+[31m[1m^[22m[39m
+     [90m 137 |[39m     expect(snap[33m.[39mdata()[33m.[39mstatus)[33m.
+[39mtoBe([32m'COMPLETED'[39m)[33m;[39m
+     [90m 138 |[39m     expect(snap[33m.[39mdata()[33m.[39mmeta[33m.[39
+mautoResolution)[33m.[39mtoBe([32m'auto_host_absent'[39m)[33m;[39m
+     [90m 139 |[39m   })[33m;[39m[0m
+
+      at Object.toBe (src/jobs/__tests__/resolveStuckPayments.test.js:136:40)
+
+  ΓùÅ resolveStuckPayments ΓÇ║ moves to support when only the host confirmed 
+and session ended over 30 minutes ago
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "REQUIRES_SUPPORT"
+    Received: "HOST_CONFIRMED"
+
+    [0m [90m 155 |[39m
+     [90m 156 |[39m     [36mconst[39m snap [33m=[39m [36mawait[39m db[
+33m.[39mcollection([32m'bookings'[39m)[33m.[39mdoc([32m'booking-c02'[39m
+)[33m.[39m[36mget[39m()[33m;[39m
+    [31m[1m>[22m[39m[90m 157 |[39m     expect(snap[33m.[39mdata()[33m.
+[39mpayment[33m.[39mstatus)[33m.[39mtoBe([32m'REQUIRES_SUPPORT'[39m)[33
+m;[39m
+     [90m     |[39m                                        
+[31m[1m^[22m[39m
+     [90m 158 |[39m     expect(snap[33m.[39mdata()[33m.[39mmeta[33m.[39
+mautoResolution)[33m.[39mtoBe([32m'auto_user_absent'[39m)[33m;[39m
+     [90m 159 |[39m   })[33m;[39m
+     [90m 160 |[39m[0m
+
+      at Object.toBe (src/jobs/__tests__/resolveStuckPayments.test.js:157:40)
+
+  ΓùÅ resolveStuckPayments ΓÇ║ expires payment when neither side confirmed and 
+session ended over 30 minutes ago
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "EXPIRED"
+    Received: "PENDING"
+
+    [0m [90m 175 |[39m
+     [90m 176 |[39m     [36mconst[39m snap [33m=[39m [36mawait[39m db[
+33m.[39mcollection([32m'bookings'[39m)[33m.[39mdoc([32m'booking-c03'[39m
+)[33m.[39m[36mget[39m()[33m;[39m
+    [31m[1m>[22m[39m[90m 177 |[39m     expect(snap[33m.[39mdata()[33m.
+[39mpayment[33m.[39mstatus)[33m.[39mtoBe([32m'EXPIRED'[39m)[33m;[39m
+     [90m     |[39m                                        
+[31m[1m^[22m[39m
+     [90m 178 |[39m     expect(snap[33m.[39mdata()[33m.[39mmeta[33m.[39
+mautoResolution)[33m.[39mtoBe([32m'auto_both_absent'[39m)[33m;[39m
+     [90m 179 |[39m   })[33m;[39m
+     [90m 180 |[39m[0m
+
+      at Object.toBe (src/jobs/__tests__/resolveStuckPayments.test.js:177:40)
+
+  ΓùÅ resolveStuckPayments ΓÇ║ marks orphaned sessions for support after five 
+hours
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "REQUIRES_SUPPORT"
+    Received: "PENDING"
+
+    [0m [90m 195 |[39m
+     [90m 196 |[39m     [36mconst[39m snap [33m=[39m [36mawait[39m db[
+33m.[39mcollection([32m'bookings'[39m)[33m.[39mdoc([32m'booking-c04'[39m
+)[33m.[39m[36mget[39m()[33m;[39m
+    [31m[1m>[22m[39m[90m 197 |[39m     expect(snap[33m.[39mdata()[33m.
+[39mpayment[33m.[39mstatus)[33m.[39mtoBe([32m'REQUIRES_SUPPORT'[39m)[33
+m;[39m
+     [90m     |[39m                                        
+[31m[1m^[22m[39m
+     [90m 198 |[39m     expect(snap[33m.[39mdata()[33m.[39mmeta[33m.[39
+mautoResolution)[33m.[39mtoBe([32m'orphaned_session'[39m)[33m;[39m
+     [90m 199 |[39m   })[33m;[39m
+     [90m 200 |[39m[0m
+
+      at Object.toBe (src/jobs/__tests__/resolveStuckPayments.test.js:197:40)
+
+Test Suites: 2 failed, 2 total
+Tests:       13 failed, 20 passed, 33 total
+Snapshots:   0 total
+Time:        4.016 s, estimated 6 s
+Ran all test suites matching /src\\api\\__tests__\\bookings.test.js|src\\jobs\\
+__tests__\\resolveStuckPayments.test.js/i.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't 
+stopped in your tests. Consider running Jest with `--detectOpenHandles` to 
+troubleshoot this issue.

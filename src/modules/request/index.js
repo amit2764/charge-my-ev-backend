@@ -2,6 +2,9 @@ const express = require('express');
 const { db, mockMode } = require('../../lib/firestore');
 const { emitToRequest, emitRequestToNearbyHosts, isHostOnline, getHostMeta } = require('../../realtime');
 const { haversineDistance } = require('../../lib/geohash');
+const { normalizeSchedule, isChargerAvailableNow, getNextAvailable } = require('../../utils/scheduleUtils');
+const { sendPushNotification, getUserDisplayName } = require('../../utils/notify');
+const { requireAuth } = require('../../middleware/auth');
 
 const inMemoryRequests = new Map();
 const inMemoryResponses = new Map();
@@ -36,9 +39,102 @@ function cleanupExpiredInMemory() {
 
 async function createRequest(req, res) {
   try {
-    const { userId, location, vehicleType } = req.body || {};
-    if (!userId || !location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+    const { location, vehicleType, chargerId, promoCode } = req.body || {};
+    const userId = req.user.uid;
+    if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
       return res.status(400).json({ success: false, error: 'userId and valid location are required' });
+    }
+
+    if (chargerId && db && !mockMode) {
+      const chargerSnap = await db.collection('chargers').doc(String(chargerId)).get();
+      if (!chargerSnap.exists) {
+        return res.status(404).json({ success: false, error: 'Selected charger not found' });
+      }
+
+      const charger = chargerSnap.data() || {};
+      if (!charger.online) {
+        return res.status(400).json({
+          success: false,
+          code: 'OUTSIDE_SCHEDULE',
+          nextAvailable: 'Unavailable',
+          error: 'Selected charger is offline'
+        });
+      }
+
+      const schedule = normalizeSchedule(charger.schedule || {});
+      const availableNow = isChargerAvailableNow(schedule);
+      if (!availableNow) {
+        return res.status(400).json({
+          success: false,
+          code: 'OUTSIDE_SCHEDULE',
+          nextAvailable: getNextAvailable(schedule),
+          error: 'Selected charger is outside availability window'
+        });
+      }
+
+      // Block check: reject if the charger's host has blocked this user
+      if (charger.hostId && userId) {
+        const blockSnap = await db.collection('blocks')
+          .where('hostId', '==', charger.hostId)
+          .where('blockedUserId', '==', userId)
+          .limit(1)
+          .get();
+        if (!blockSnap.empty) {
+          return res.status(403).json({
+            success: false,
+            code: 'BLOCKED',
+            error: 'You are not able to request this charger'
+          });
+        }
+      }
+
+      // Check if user already has an active booking
+      const existingUserBookingSnap = await db.collection('bookings')
+        .where('userId', '==', userId)
+        .where('status', 'in', ['CONFIRMED', 'STARTED'])
+        .limit(1)
+        .get();
+      if (!existingUserBookingSnap.empty) {
+        return res.status(409).json({ success: false, error: 'User already has an active booking' });
+      }
+
+      // Check if host already has an active booking
+      if (charger.hostId) {
+        const existingHostBookingSnap = await db.collection('bookings')
+          .where('hostId', '==', charger.hostId)
+          .where('status', 'in', ['CONFIRMED', 'STARTED'])
+          .limit(1)
+          .get();
+        if (!existingHostBookingSnap.empty) {
+          return res.status(409).json({ success: false, error: 'Host charger already has an active booking' });
+        }
+      }
+    }
+
+    if (promoCode && db && !mockMode) {
+      const normalizedPromoCode = String(promoCode).trim().toUpperCase();
+      const promoSnap = await db.collection('promoCodes').doc(normalizedPromoCode).get();
+      if (!promoSnap.exists) {
+        return res.status(400).json({ success: false, error: 'Promo code not found' });
+      }
+
+      const promo = promoSnap.data() || {};
+      if (!promo.active) {
+        return res.status(400).json({ success: false, error: 'Promo code is no longer active' });
+      }
+
+      const expiresAtMs = promo.expiresAt && typeof promo.expiresAt.toDate === 'function'
+        ? promo.expiresAt.toDate().getTime()
+        : (promo.expiresAt ? new Date(promo.expiresAt).getTime() : null);
+      if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
+        return res.status(400).json({ success: false, error: 'Promo code has expired' });
+      }
+
+      const usedCount = Number(promo.usedCount || 0);
+      const maxUses = Number(promo.maxUses || Number.POSITIVE_INFINITY);
+      if (usedCount >= maxUses) {
+        return res.status(400).json({ success: false, error: 'Promo code usage limit reached' });
+      }
     }
 
     const id = uid('req');
@@ -46,7 +142,9 @@ async function createRequest(req, res) {
       id,
       userId,
       location,
+      chargerId: chargerId || null,
       vehicleType: vehicleType || 'electric',
+      promoCode: promoCode ? String(promoCode).trim().toUpperCase() : null,
       status: 'OPEN',
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + REQUEST_TTL_MS).toISOString()
@@ -120,10 +218,46 @@ async function listPendingRequests(req, res) {
   }
 }
 
+async function getRequestResponses(req, res) {
+  try {
+    const requestId = String(req.params?.id || '').trim();
+    if (!requestId) {
+      return res.status(400).json({ success: false, error: 'requestId is required' });
+    }
+
+    if (!db || mockMode) {
+      const request = inMemoryRequests.get(requestId) || null;
+      const responses = inMemoryResponses.get(requestId) || [];
+      return res.json({ success: true, request, responses });
+    }
+
+    const requestRef = db.collection('requests').doc(requestId);
+    const requestSnap = await requestRef.get();
+    if (!requestSnap.exists) {
+      return res.status(404).json({ success: false, error: 'Request not found' });
+    }
+
+    const request = resetExpiredAcceptances({ id: requestSnap.id, ...(requestSnap.data() || {}) });
+    const responsesSnap = await db.collection('responses')
+      .where('requestId', '==', requestId)
+      .limit(20)
+      .get();
+
+    const responses = responsesSnap.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+
+    return res.json({ success: true, request, responses });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Failed to load request responses' });
+  }
+}
+
 async function respondToRequest(req, res) {
   try {
-    const { requestId, hostId, status, price, estimatedArrival, hostLocation } = req.body || {};
-    if (!requestId || !hostId) {
+    const { requestId, status, price, estimatedArrival, hostLocation } = req.body || {};
+    const hostId = req.user.uid;
+    if (!requestId) {
       return res.status(400).json({ success: false, error: 'requestId and hostId are required' });
     }
     if (!isHostOnline(hostId)) {
@@ -259,6 +393,16 @@ async function respondToRequest(req, res) {
       estimatedArrival: Number(estimatedArrival) || 5
     });
 
+    // Push: notify user that a host accepted (fire-and-forget)
+    getUserDisplayName(hostId).then((hostName) => {
+      sendPushNotification(
+        request.userId,
+        'Request accepted',
+        `${hostName} accepted your request`,
+        { requestId, deepLink: `/?role=user&tab=charge&requestId=${requestId}` }
+      ).catch(() => {});
+    }).catch(() => {});
+
     return res.json({ success: true, response });
   } catch (error) {
     if (error.message.includes('Another host already accepted')) {
@@ -270,9 +414,10 @@ async function respondToRequest(req, res) {
 
 function registerRoutes(app) {
   const router = express.Router();
-  router.post('/request', createRequest);
-  router.get('/requests/pending', listPendingRequests);
-  router.post('/respond', respondToRequest);
+  router.post('/request', requireAuth, createRequest);
+  router.get('/requests/:id/responses', requireAuth, getRequestResponses);
+  router.get('/requests/pending', requireAuth, listPendingRequests);
+  router.post('/respond', requireAuth, respondToRequest);
   app.use('/api', router);
 }
 

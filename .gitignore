@@ -9,3 +9,4 @@ npm-debug.log
 key.json
 ev-frontend/dist/
 ev-admin/dist/
+.vercel

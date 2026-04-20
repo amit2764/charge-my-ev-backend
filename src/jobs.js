@@ -4,12 +4,19 @@ const { sendReceiptEmail } = require('./email');
 
 let emailQueue;
 
-const redisUrl = process.env.REDIS_URL;
-const isInvalidUrl = !redisUrl ||
-                     redisUrl.includes('your_upstash_endpoint') ||
-                     redisUrl.includes('YOUR_ACTUAL_PASSWORD') ||
-                     redisUrl.includes('YOUR_ENDPOINT') ||
-                     redisUrl.endsWith('PORT');
+const redisUrl =
+  process.env.REDIS_URL ||
+  process.env.REDIS_PRIVATE_URL ||
+  process.env.REDIS_PUBLIC_URL ||
+  process.env.RAILWAY_REDIS_URL ||
+  '';
+const isPlaceholder =
+  redisUrl.includes('your_upstash_endpoint') ||
+  redisUrl.includes('YOUR_ACTUAL_PASSWORD') ||
+  redisUrl.includes('YOUR_ENDPOINT') ||
+  redisUrl.endsWith('PORT');
+const isValidScheme = /^rediss?:\/\//i.test(redisUrl);
+const isInvalidUrl = !redisUrl || isPlaceholder || !isValidScheme;
 
 // Check if Redis URL is configured and valid before creating the queue
 if (!isInvalidUrl) {
@@ -28,7 +35,7 @@ if (!isInvalidUrl) {
     emailQueue = null; // Fallback to running without the queue
   }
 } else {
-  console.warn('⚠️ BullMQ Queue disabled: REDIS_URL is not configured.');
+  console.warn('⚠️ BullMQ Queue disabled: Redis URL is not configured (REDIS_URL/REDIS_PRIVATE_URL/REDIS_PUBLIC_URL).');
 }
 
 function initializeWorkers() {
