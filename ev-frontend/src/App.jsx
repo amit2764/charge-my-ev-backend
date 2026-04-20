@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 import { useStore } from './store';
 import { initFCM, onForegroundMessage } from './utils/fcm';
 import LoginScreen from './LoginScreen';
@@ -22,12 +24,22 @@ function isValidTab(role, tab) {
 
 export default function App() {
   const { user, role, setRole, logout, setUser } = useStore();
+  const [firebaseReady, setFirebaseReady] = useState(false);
   const [tabsByRole, setTabsByRole] = useState({
     user: DEFAULT_TAB_BY_ROLE.user,
     host: DEFAULT_TAB_BY_ROLE.host
   });
   const [authGate, setAuthGate] = useState({ mode: 'none', rememberedUser: null });
   const [foregroundBanner, setForegroundBanner] = useState(null);
+
+  // Wait for Firebase Auth to restore its session before allowing Firestore reads.
+  // Without this gate, onSnapshot / getDocs fire while request.auth is still null
+  // (Firebase Auth restores from IndexedDB asynchronously), producing
+  // "Missing or insufficient permissions" errors on every page load.
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, () => setFirebaseReady(true));
+    return unsub;
+  }, []);
 
   // FCM: init token on every app open, refresh silently
   useEffect(() => {
@@ -88,6 +100,14 @@ export default function App() {
     setUser(null);
     setAuthGate({ mode: 'none', rememberedUser: null });
   };
+
+  if (!firebaseReady) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#020617]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+      </div>
+    );
+  }
 
   if (authGate.mode === 'setup' && user) {
     return (

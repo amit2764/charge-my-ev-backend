@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from './firebase';
+
+function resolveUserUid() {
+  // Prefer a live Firebase Auth session (uid) over any cached value
+  if (auth.currentUser?.uid) return auth.currentUser.uid;
+  return sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
+}
 import { useStore } from './store';
 import { Button, Input, Card } from './components';
 
@@ -117,6 +123,7 @@ export default function LoginScreen() {
   const isReturning = canQuickLogin;
   const [step, setStep] = useState(canQuickLogin ? 'quick' : 'phone');
 
+  const [verifiedUserId, setVerifiedUserId] = useState('');
   const [phone, setPhone] = useState('');
   const [verifiedPhone, setVerifiedPhone] = useState(storedUser);
   const [otp, setOtp] = useState('');
@@ -130,13 +137,14 @@ export default function LoginScreen() {
   const [recaptchaReady, setRecaptchaReady] = useState(false);
 
   const completeLoginWithVerifiedPhone = () => {
-    const safeVerifiedPhone = sanitizeUserId(verifiedPhone);
-    if (!safeVerifiedPhone) {
+    // Prefer Firebase UID; fall back to any stored identity
+    const safeUid = sanitizeUserId(verifiedUserId) || resolveUserUid();
+    if (!safeUid) {
       setError('Session data is invalid. Please log in again with OTP.');
       setStep('phone');
       return false;
     }
-    setUser(safeVerifiedPhone);
+    setUser(safeUid);
     return true;
   };
 
@@ -202,16 +210,18 @@ export default function LoginScreen() {
       if (!window.confirmationResult) { setError('Send OTP first.'); return; }
       const result = await window.confirmationResult.confirm(otp);
       const phoneNumber = result.user.phoneNumber;
+      const firebaseUid = result.user.uid;
       setVerifiedPhone(phoneNumber);
+      setVerifiedUserId(firebaseUid);
       if (!pinHash) {
         setStep('setup-pin');
       } else {
-        const safePhoneNumber = sanitizeUserId(phoneNumber);
-        if (!safePhoneNumber) {
-          setError('Invalid phone number returned from login. Please retry.');
+        const safeUid = sanitizeUserId(firebaseUid);
+        if (!safeUid) {
+          setError('Invalid session returned from login. Please retry.');
           return;
         }
-        setUser(safePhoneNumber);
+        setUser(safeUid);
       }
     } catch { setError('Invalid OTP. Please try again.'); }
     finally { setLoading(false); }
@@ -245,13 +255,13 @@ export default function LoginScreen() {
     setLoading(true); setError('');
     try {
       await verifyBiometric(biometricCredentialId);
-      const safeStoredUser = sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
-      if (!safeStoredUser) {
+      const safeUid = resolveUserUid();
+      if (!safeUid) {
         setError('Quick login session not linked. Use phone OTP once.');
         setStep('phone');
         return;
       }
-      setUser(safeStoredUser);
+      setUser(safeUid);
     } catch { setError('Biometric failed. Enter your PIN instead.'); }
     finally { setLoading(false); }
   };
@@ -261,13 +271,13 @@ export default function LoginScreen() {
     try {
       const ok = await verifyPin(pinInput);
       if (ok) {
-        const safeStoredUser = sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
-        if (!safeStoredUser) {
+        const safeUid = resolveUserUid();
+        if (!safeUid) {
           setError('Quick login session not linked. Use phone OTP once.');
           setStep('phone');
           return;
         }
-        setUser(safeStoredUser);
+        setUser(safeUid);
       }
       else { setError('Wrong PIN. Try again or use phone OTP.'); setPinInput(''); }
     } finally { setLoading(false); }

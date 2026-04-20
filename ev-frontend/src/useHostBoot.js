@@ -23,12 +23,18 @@ export async function fetchActiveBookingForHost(hostId) {
     limit(10)
   );
 
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-
-  const bookings = snap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-  const active = bookings.find((booking) => resolveBookingState(booking, hostId).screen !== 'HOME');
-  return active || null;
+  try {
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const bookings = snap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+    const active = bookings.find((booking) => resolveBookingState(booking, hostId).screen !== 'HOME');
+    return active || null;
+  } catch (err) {
+    // Firestore read failed (most commonly: Firebase Auth not yet initialized on page load).
+    // Return null so the caller falls back to the backend API.
+    console.warn('fetchActiveBookingForHost: Firestore read failed (non-fatal):', err.code || err.message);
+    return null;
+  }
 }
 
 export function useHostBoot(hostId, { navigateTo, onBooking } = {}) {
@@ -59,8 +65,14 @@ export function useHostBoot(hostId, { navigateTo, onBooking } = {}) {
             onBooking?.(liveBooking);
             const r = resolveBookingState(liveBooking, hostId);
             navigateTo?.(r.screen, r);
+          }, (err) => {
+            // Firestore listener error (e.g. permissions) — data already loaded via API; ignore.
+            console.warn('useHostBoot: Firestore listener error (non-fatal):', err.code);
           });
         }
+      } catch (err) {
+        // Firestore query failed (e.g. auth not ready yet) — component will use API polling fallback.
+        console.warn('useHostBoot: Firestore boot error (non-fatal):', err.code || err.message);
       } finally {
         if (!disposed) setReady(true);
       }
