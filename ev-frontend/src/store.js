@@ -3,6 +3,7 @@ import { create } from 'zustand';
 function safeGetItem(key, fallback = null) {
   try {
     const value = localStorage.getItem(key);
+    if (value === 'null' || value === 'undefined' || value === '') return fallback;
     return value ?? fallback;
   } catch {
     return fallback;
@@ -44,7 +45,9 @@ async function hashPin(pin) {
 // User Store for EV Frontend
 export const useStore = create((set, get) => ({
   // Auth
-  user: safeGetItem('user') || null,
+  // Session is always explicit per app launch. We keep only a remembered user id
+  // for quick PIN/biometric unlock, not an always-on signed-in session.
+  user: null,
   role: safeGetItem('role') || 'user', // 'user' or 'host'
 
   // Quick-login credentials (device-local)
@@ -59,14 +62,23 @@ export const useStore = create((set, get) => ({
   activeRequest: readJson('activeRequest', null),
   activeBooking: readJson('activeBooking', null),
   activeBookingRole: safeGetItem('activeBookingRole') || null,
+  bookingStep: safeGetItem('bookingStep') || 'REQUEST',
 
   // Host availability
   isHostAvailable: false,
 
   // Actions
   setUser: (user) => {
-    safeSetItem('user', user);
-    set({ user });
+    const normalizedUser = (typeof user === 'string' ? user.trim() : user) || null;
+    if (!normalizedUser || normalizedUser === 'null' || normalizedUser === 'undefined') {
+      safeRemoveItem('user');
+      set({ user: null });
+      return;
+    }
+
+    safeSetItem('user', normalizedUser);
+    safeSetItem('authUser', normalizedUser);
+    set({ user: normalizedUser });
   },
 
   setRole: (role) => {
@@ -88,6 +100,7 @@ export const useStore = create((set, get) => ({
   clearPin: () => {
     safeRemoveItem('pinHash');
     safeRemoveItem('biometricCredentialId');
+    safeRemoveItem('authUser');
     set({ pinHash: null, biometricCredentialId: null });
   },
 
@@ -135,7 +148,14 @@ export const useStore = create((set, get) => ({
 
     safeRemoveItem('activeBooking');
     safeRemoveItem('activeBookingRole');
-    set({ activeBooking: null, activeBookingRole: null });
+    safeSetItem('bookingStep', 'REQUEST');
+    set({ activeBooking: null, activeBookingRole: null, bookingStep: 'REQUEST' });
+  },
+
+  setBookingStep: (step) => {
+    const nextStep = step || 'REQUEST';
+    safeSetItem('bookingStep', nextStep);
+    set({ bookingStep: nextStep });
   },
 
   setIsHostAvailable: (available) => set({ isHostAvailable: available }),
@@ -145,7 +165,12 @@ export const useStore = create((set, get) => ({
     safeRemoveItem('role');
     safeRemoveItem('userProfile');
     safeRemoveItem('hostProfile');
-    // Keep PIN and biometric on logout so quick-login works on next open
+    // Keep remembered user id only when quick unlock exists.
+    const hasQuickUnlock = !!get().pinHash || !!get().biometricCredentialId;
+    if (!hasQuickUnlock) {
+      safeRemoveItem('authUser');
+    }
+
     set({
       user: null,
       role: 'user',
@@ -154,11 +179,13 @@ export const useStore = create((set, get) => ({
       activeRequest: null,
       activeBooking: null,
       activeBookingRole: null,
+      bookingStep: 'REQUEST',
       isHostAvailable: false
     });
     safeRemoveItem('activeRequest');
     safeRemoveItem('activeBooking');
     safeRemoveItem('activeBookingRole');
+    safeSetItem('bookingStep', 'REQUEST');
   }
 }));
 

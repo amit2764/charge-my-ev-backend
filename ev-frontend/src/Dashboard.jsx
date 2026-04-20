@@ -82,6 +82,30 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const handleAcceptOffer = async (response) => {
+    if (!activeRequestId || !response?.hostId) {
+      alert('Offer is no longer valid. Please request again.');
+      return;
+    }
+
+    try {
+      const bookingResponse = await api.post('/api/book', {
+        userId: user,
+        hostId: response.hostId,
+        requestId: activeRequestId,
+        price: response.price
+      });
+
+      if (bookingResponse.data?.success) {
+        setActiveRequestId(null);
+        setHostResponses([]);
+        alert('Booking confirmed successfully.');
+      }
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to confirm booking.');
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Top Navigation */}
@@ -111,7 +135,7 @@ export default function Dashboard({ user, onLogout }) {
                 <p style={{ margin: '0 0 5px 0' }}><strong>Host ID:</strong> {String(res.hostId || '----').slice(-4)}</p>
                 <p style={{ margin: '0 0 5px 0' }}><strong>Price:</strong> ${res.price}/hr</p>
                 <p style={{ margin: '0 0 10px 0' }}><strong>ETA:</strong> {res.estimatedArrival} mins away</p>
-                <button className="fab-button" style={{ position: 'relative', left: '0', transform: 'none', width: '100%', justifyContent: 'center', padding: '10px', background: '#00C853' }}>Accept Offer</button>
+                <button className="fab-button" onClick={() => handleAcceptOffer(res)} style={{ position: 'relative', left: '0', transform: 'none', width: '100%', justifyContent: 'center', padding: '10px', background: '#00C853' }}>Accept Offer</button>
               </div>
             ))
           )}

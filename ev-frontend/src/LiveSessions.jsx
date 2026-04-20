@@ -29,6 +29,14 @@ export default function LiveSessions() {
     }
   };
 
+  const handleFlag = (id) => {
+    setSessions((prev) => prev.map((session) => (
+      session.id === id
+        ? { ...session, status: 'FLAGGED' }
+        : session
+    )));
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -47,7 +55,7 @@ export default function LiveSessions() {
             <td className="px-4 py-3"><Badge status={s.status} /></td>
             <td className="px-4 py-3 flex gap-2">
               {hasActionAccess && <Button variant="danger" size="sm" onClick={() => handleForceEnd(s.id)}>Force End</Button>}
-              <Button variant="outline" size="sm">Flag</Button>
+              <Button variant="outline" size="sm" onClick={() => handleFlag(s.id)}>Flag</Button>
             </td>
           </tr>
         ))}

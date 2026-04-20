@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from './firebase';
 
 // This will automatically use your live Render URL in production,
 // but when the app is running on a local machine, it should target the local backend.
@@ -19,5 +20,16 @@ const api = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+// Attach Firebase ID token to every request automatically.
+// Firebase SDK handles token refresh (tokens expire after 1 hour).
+api.interceptors.request.use(async (config) => {
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    const token = await currentUser.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => Promise.reject(error));
 
 export default api;

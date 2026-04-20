@@ -1,8 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from './firebase';
 import { useStore } from './store';
 import { Button, Input, Card } from './components';
+
+function sanitizeUserId(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  const lowered = normalized.toLowerCase();
+  if (!normalized || lowered === 'null' || lowered === 'undefined') return '';
+  return normalized;
+}
+
+function PinInput({ value, onChange, placeholder = '••••', autoComplete = 'off' }) {
+  const inputRef = useRef(null);
+  const shouldRestoreFocusRef = useRef(false);
+
+  useEffect(() => {
+    if (!shouldRestoreFocusRef.current || !inputRef.current) return;
+    if (document.activeElement !== inputRef.current) {
+      inputRef.current.focus({ preventScroll: true });
+      const cursorPosition = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(cursorPosition, cursorPosition);
+    }
+    shouldRestoreFocusRef.current = false;
+  }, [value]);
+
+  const handleChange = (event) => {
+    shouldRestoreFocusRef.current = document.activeElement === event.target;
+    onChange(event);
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="tel"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      autoCapitalize="off"
+      autoCorrect="off"
+      spellCheck={false}
+      autoComplete={autoComplete}
+      maxLength={6}
+      placeholder={placeholder}
+      value={value}
+      onChange={handleChange}
+      className="w-full rounded-[18px] border border-white/10 bg-slate-950/70 px-3 py-3 text-center font-mono text-2xl tracking-[0.5em] text-white outline-none transition-all focus:border-cyan-400/45 focus:ring-2 focus:ring-cyan-500/35"
+    />
+  );
+}
 
 // ─── Biometric helpers ───────────────────────────────────────────────────────
 
@@ -57,6 +103,8 @@ async function verifyBiometric(credentialIdB64) {
 
 export default function LoginScreen() {
   const { setUser, pinHash, biometricCredentialId, verifyPin, setPin, setBiometricCredentialId } = useStore();
+  const storedUser = sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
+  const canQuickLogin = !!pinHash && !!storedUser;
 
   /*
    * Steps:
@@ -66,11 +114,11 @@ export default function LoginScreen() {
    *  'setup-pin'  – first login: create PIN
    *  'setup-bio'  – offer biometric enrolment after PIN setup
    */
-  const isReturning = !!pinHash;
-  const [step, setStep] = useState(isReturning ? 'quick' : 'phone');
+  const isReturning = canQuickLogin;
+  const [step, setStep] = useState(canQuickLogin ? 'quick' : 'phone');
 
   const [phone, setPhone] = useState('');
-  const [verifiedPhone, setVerifiedPhone] = useState(localStorage.getItem('user') || '');
+  const [verifiedPhone, setVerifiedPhone] = useState(storedUser);
   const [otp, setOtp] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
@@ -80,6 +128,17 @@ export default function LoginScreen() {
   const [info, setInfo] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [recaptchaReady, setRecaptchaReady] = useState(false);
+
+  const completeLoginWithVerifiedPhone = () => {
+    const safeVerifiedPhone = sanitizeUserId(verifiedPhone);
+    if (!safeVerifiedPhone) {
+      setError('Session data is invalid. Please log in again with OTP.');
+      setStep('phone');
+      return false;
+    }
+    setUser(safeVerifiedPhone);
+    return true;
+  };
 
   // ── reCAPTCHA loader
   useEffect(() => {
@@ -147,7 +206,12 @@ export default function LoginScreen() {
       if (!pinHash) {
         setStep('setup-pin');
       } else {
-        setUser(phoneNumber);
+        const safePhoneNumber = sanitizeUserId(phoneNumber);
+        if (!safePhoneNumber) {
+          setError('Invalid phone number returned from login. Please retry.');
+          return;
+        }
+        setUser(safePhoneNumber);
       }
     } catch { setError('Invalid OTP. Please try again.'); }
     finally { setLoading(false); }
@@ -161,7 +225,7 @@ export default function LoginScreen() {
     await setPin(pinInput);
     setLoading(false);
     if (isBiometricAvailable()) { setStep('setup-bio'); }
-    else { setUser(verifiedPhone); }
+    else { completeLoginWithVerifiedPhone(); }
   };
 
   const handleEnrollBiometric = async () => {
@@ -171,14 +235,23 @@ export default function LoginScreen() {
       setBiometricCredentialId(credId);
       setInfo('Biometric enrolled ✓');
     } catch { setError('Biometric setup failed. You can enable it later in Profile.'); }
-    finally { setLoading(false); setUser(verifiedPhone); }
+    finally {
+      setLoading(false);
+      completeLoginWithVerifiedPhone();
+    }
   };
 
   const handleBiometricLogin = async () => {
     setLoading(true); setError('');
     try {
       await verifyBiometric(biometricCredentialId);
-      setUser(localStorage.getItem('user'));
+      const safeStoredUser = sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
+      if (!safeStoredUser) {
+        setError('Quick login session not linked. Use phone OTP once.');
+        setStep('phone');
+        return;
+      }
+      setUser(safeStoredUser);
     } catch { setError('Biometric failed. Enter your PIN instead.'); }
     finally { setLoading(false); }
   };
@@ -187,42 +260,41 @@ export default function LoginScreen() {
     setLoading(true); setError('');
     try {
       const ok = await verifyPin(pinInput);
-      if (ok) { setUser(localStorage.getItem('user')); }
+      if (ok) {
+        const safeStoredUser = sanitizeUserId(localStorage.getItem('authUser') || localStorage.getItem('user'));
+        if (!safeStoredUser) {
+          setError('Quick login session not linked. Use phone OTP once.');
+          setStep('phone');
+          return;
+        }
+        setUser(safeStoredUser);
+      }
       else { setError('Wrong PIN. Try again or use phone OTP.'); setPinInput(''); }
     } finally { setLoading(false); }
   };
 
-  const PinInput = ({ value, onChange, placeholder = '••••' }) => (
-    <input
-      type="password"
-      inputMode="numeric"
-      maxLength={6}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      className="w-full p-3 bg-gray-900 border-2 border-gray-800 rounded-lg text-white text-center text-2xl tracking-[0.5em] font-mono focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all"
-    />
-  );
-
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-black text-white">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-black text-white mb-2">⚡ Charge My EV</h1>
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-start overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.22),transparent_42%),linear-gradient(180deg,#020617,#0f172a)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-[calc(env(safe-area-inset-top,0px)+1rem)] text-white sm:justify-center md:min-h-screen">
+      <div className="ambient-orb left-[6%] top-[8%] h-28 w-28 bg-blue-500/25" />
+      <div className="ambient-orb right-[12%] top-[18%] h-24 w-24 bg-emerald-500/20" />
+      <div className="mb-8 text-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Welcome back</p>
+        <h1 className="mb-2 mt-1 text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">⚡ Charge My EV</h1>
         <p className="text-gray-400">The future of peer-to-peer charging.</p>
       </div>
 
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm overflow-hidden border border-white/10 sm:mb-0">
         <div id="recaptcha-container" />
 
-        {error && <div className="p-3 mb-4 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg">{error}</div>}
-        {info && <div className="p-3 mb-4 text-sm text-green-400 bg-green-900/50 border border-green-800 rounded-lg">{info}</div>}
+        {error && <div className="mb-4 rounded-[16px] border border-red-500/30 bg-red-900/30 p-3 text-sm text-red-300">{error}</div>}
+        {info && <div className="mb-4 rounded-[16px] border border-emerald-500/30 bg-emerald-900/20 p-3 text-sm text-emerald-300">{info}</div>}
 
         {/* ── Returning user: quick login ── */}
         {step === 'quick' && (
           <div className="space-y-3">
             <p className="text-center text-gray-400 text-sm mb-4">
               Welcome back!<br />
-              <span className="text-gray-500 text-xs">{localStorage.getItem('user')}</span>
+              <span className="text-gray-500 text-xs">{storedUser || 'Saved account'}</span>
             </p>
 
             {biometricCredentialId && isBiometricAvailable() && (
@@ -233,14 +305,14 @@ export default function LoginScreen() {
 
             <div>
               <label className="block text-sm font-semibold text-gray-500 mb-1">PIN</label>
-              <PinInput value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+              <PinInput autoComplete="current-password" value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} />
             </div>
             <Button onClick={handlePinLogin} disabled={loading || pinInput.length < 4}>
               {loading ? 'Verifying…' : 'Unlock'}
             </Button>
             <button
               onClick={() => { setPinInput(''); setStep('phone'); }}
-              className="w-full text-center text-xs text-cyan-500 hover:text-cyan-400 mt-2"
+              className="mt-2 w-full text-center text-xs text-cyan-400 hover:text-cyan-300"
             >
               Login with phone OTP instead
             </button>
@@ -262,7 +334,7 @@ export default function LoginScreen() {
               {loading ? 'Sending…' : cooldown > 0 ? `Wait ${cooldown}s` : 'Send OTP'}
             </Button>
             {isReturning && (
-              <button onClick={() => setStep('quick')} className="w-full text-center text-xs text-cyan-500 hover:text-cyan-400 mt-3">
+              <button onClick={() => setStep('quick')} className="mt-3 w-full text-center text-xs text-cyan-400 hover:text-cyan-300">
                 ← Back to quick login
               </button>
             )}
@@ -280,12 +352,12 @@ export default function LoginScreen() {
               placeholder="• • • • • •"
               value={otp}
               onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              className="w-full p-3 bg-gray-900 border-2 border-gray-800 rounded-lg text-white text-center text-2xl tracking-[0.5em] font-mono mb-4 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
+              className="mb-4 w-full rounded-[18px] border border-white/10 bg-slate-950/70 px-3 py-3 text-center font-mono text-2xl tracking-[0.5em] text-white outline-none focus:border-cyan-400/45 focus:ring-2 focus:ring-cyan-500/35"
             />
             <Button onClick={handleVerifyOtp} disabled={loading || otp.length < 6}>
               {loading ? 'Verifying…' : 'Verify & Continue'}
             </Button>
-            <button onClick={() => setStep('phone')} className="w-full text-center text-xs text-gray-500 hover:text-gray-300 mt-3">
+            <button onClick={() => setStep('phone')} className="mt-3 w-full text-center text-xs text-gray-500 hover:text-gray-300">
               ← Change number
             </button>
           </>
@@ -300,16 +372,16 @@ export default function LoginScreen() {
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-500 mb-1">New PIN (4–6 digits)</label>
-              <PinInput value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+              <PinInput autoComplete="new-password" value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))} />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-500 mb-1">Confirm PIN</label>
-              <PinInput value={pinConfirm} onChange={e => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••" />
+              <PinInput autoComplete="new-password" value={pinConfirm} onChange={e => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••" />
             </div>
             <Button onClick={handleSetupPin} disabled={loading || pinInput.length < 4}>
               {loading ? 'Saving…' : 'Set PIN & Continue'}
             </Button>
-            <button onClick={() => setUser(verifiedPhone)} className="w-full text-center text-xs text-gray-500 hover:text-gray-300 mt-1">
+            <button onClick={completeLoginWithVerifiedPhone} className="mt-1 w-full text-center text-xs text-gray-500 hover:text-gray-300">
               Skip, use OTP every time
             </button>
           </div>
@@ -324,7 +396,7 @@ export default function LoginScreen() {
             <Button onClick={handleEnrollBiometric} disabled={loading}>
               {loading ? 'Setting up…' : 'Enable Fingerprint / Face ID'}
             </Button>
-            <button onClick={() => setUser(verifiedPhone)} className="w-full text-center text-xs text-gray-500 hover:text-gray-300 mt-1">
+            <button onClick={completeLoginWithVerifiedPhone} className="mt-1 w-full text-center text-xs text-gray-500 hover:text-gray-300">
               Skip for now
             </button>
           </div>
