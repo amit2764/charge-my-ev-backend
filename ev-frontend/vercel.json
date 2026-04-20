@@ -4,6 +4,7 @@
   "outputDirectory": "dist",
   "env": {
     "VITE_ENVIRONMENT": "production",
+    "VITE_API_BASE_URL": "https://charge-my-ev-backend-production.up.railway.app",
     "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
   }
 }

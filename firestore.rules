@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the requester authenticated?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: is the requester the given uid?
+    function isUser(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ----------------------------------------------------------------
+    // users/{userId}
+    // - Authenticated users can read and write ONLY their own document.
+    // - Allowed writes: fcmToken, fcmUpdatedAt, notificationPrefs
+    //   (backend writes full profile via Admin SDK, which bypasses rules)
+    // ----------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isUser(userId);
+      allow write: if isUser(userId) && onlyWritingAllowedUserFields();
+
+      function onlyWritingAllowedUserFields() {
+        let allowed = ['fcmToken', 'fcmUpdatedAt', 'notificationPrefs'];
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+      }
+
+      // Allow creating own user doc (first-time FCM token write)
+      allow create: if isUser(userId);
+    }
+
+    // ----------------------------------------------------------------
+    // bookings/{bookingId}
+    // - Only the user or host in a booking can read it.
+    // - Writes go through the backend (Admin SDK), NOT client-side.
+    // ----------------------------------------------------------------
+    match /bookings/{bookingId} {
+      allow read: if isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.hostId == request.auth.uid
+      );
+      // No client writes — backend Admin SDK handles all booking mutations
+      allow write: if false;
+
+      // ----------------------------------------------------------------
+      // bookings/{bookingId}/messages (in-app chat)
+      // - Participants can read all messages in their booking.
+      // - Participants can create new messages.
+      // - Only the recipient can mark a message as read (update readAt).
+      // ----------------------------------------------------------------
+      match /messages/{messageId} {
+        function isParticipant() {
+          return isAuth() && (
+            get(/databases/$(database)/documents/bookings/$(bookingId)).data.userId == request.auth.uid ||
+            get(/databases/$(database)/documents/bookings/$(bookingId)).data.hostId == request.auth.uid
+          );
+        }
+
+        allow read: if isParticipant();
+
+        // Create: sender must be a participant and senderId must match their uid
+        allow create: if isParticipant()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.keys().hasAll(['senderId', 'text', 'createdAt']);
+
+        // Update: only allowed to set readAt (mark as read), not change other fields
+        allow update: if isParticipant()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      }
+    }
+
+    // ----------------------------------------------------------------
+    // All other collections: no client access (Admin SDK only)
+    // ----------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
