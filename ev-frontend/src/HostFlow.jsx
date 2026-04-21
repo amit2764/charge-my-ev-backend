@@ -32,8 +32,9 @@ function getHostFlowIndex(activeBooking, isHostAvailable) {
   return 0;
 }
 
-function canRenderHostBooking(booking, userId) {
+function canRenderHostBooking(booking, userId, bookingRole) {
   if (!booking) return false;
+  if (bookingRole && bookingRole !== 'host') return false;
   if (booking.hostId && userId) return booking.hostId === userId;
   return true;
 }
@@ -45,7 +46,7 @@ function isValidUserId(value) {
 }
 
 export default function HostFlow() {
-  const { user, hostProfile, setHostProfile, isHostAvailable, setIsHostAvailable, activeBooking, setActiveBooking, setBookingStep } = useStore();
+  const { user, hostProfile, setHostProfile, isHostAvailable, setIsHostAvailable, activeBooking, activeBookingRole, setActiveBooking, setBookingStep } = useStore();
   const [requests, setRequests] = useState([]);
   const [price, setPrice] = useState('5.00');
   const [radiusKm, setRadiusKm] = useState('5');
@@ -549,7 +550,7 @@ export default function HostFlow() {
   const canOpenChat = !!activeBooking?.id && chatEnabledStatuses.has(String(activeBooking?.status || '').toUpperCase());
   const dashboardRevenue = activeBooking?.finalAmount || 0;
 
-  if (activeBooking && canRenderHostBooking(activeBooking, user)) {
+  if (activeBooking && canRenderHostBooking(activeBooking, user, activeBookingRole)) {
     return (
       <div className="flow-shell space-y-4 p-4 pb-6 sm:p-5">
         <div className="flow-rail">
