@@ -83,8 +83,15 @@ function isValidUserId(value) {
   return normalized !== '' && normalized !== 'null' && normalized !== 'undefined';
 }
 
+function canRenderUserBooking(booking, userId, bookingRole) {
+  if (!booking) return false;
+  if (bookingRole && bookingRole !== 'user') return false;
+  if (booking.userId && userId) return booking.userId === userId;
+  return true;
+}
+
 export default function UserFlow() {
-  const { user, userProfile, activeRequest, setActiveRequest, activeBooking, setActiveBooking, setBookingStep } = useStore();
+  const { user, userProfile, activeRequest, setActiveRequest, activeBooking, activeBookingRole, setActiveBooking, setBookingStep } = useStore();
   const [step, setStep] = useState('REQUEST'); // REQUEST, MATCHING, CONFIRM, CHARGING, PAYMENT, RATING
   const [hosts, setHosts] = useState([]);
   const [selectedHost, setSelectedHost] = useState(null);
@@ -103,12 +110,13 @@ export default function UserFlow() {
   const [preferredHostId, setPreferredHostId] = useState(null);
   const [promoCode, setPromoCode] = useState('');
   const { validating, error: promoError, discount, appliedCode, validateCode } = usePromoCode();
-  const flowIndex = getFlowIndex(step, activeBooking);
+  const canRenderActiveBooking = canRenderUserBooking(activeBooking, user, activeBookingRole);
+  const flowIndex = getFlowIndex(step, canRenderActiveBooking ? activeBooking : null);
   const hasValidUser = isValidUserId(user);
   const { unreadCount } = useChat(activeBooking, user);
 
   const chatEnabledStatuses = new Set(['BOOKED', 'CONFIRMED', 'STARTED']);
-  const canOpenChat = !!activeBooking?.id && chatEnabledStatuses.has(String(activeBooking?.status || '').toUpperCase());
+  const canOpenChat = canRenderActiveBooking && !!activeBooking?.id && chatEnabledStatuses.has(String(activeBooking?.status || '').toUpperCase());
 
   const getCurrentRequestId = () => useStore.getState().activeRequest?.id || null;
 
@@ -942,7 +950,7 @@ export default function UserFlow() {
         </div>
       )}
 
-      {step === 'CHARGING' && activeBooking && (
+      {step === 'CHARGING' && canRenderActiveBooking && activeBooking && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -1048,7 +1056,7 @@ export default function UserFlow() {
         </div>
       )}
 
-      {chatOpen && canOpenChat && (
+      {chatOpen && canOpenChat && canRenderActiveBooking && (
         <ChatScreen
           booking={activeBooking}
           myUserId={user}
@@ -1056,7 +1064,7 @@ export default function UserFlow() {
         />
       )}
 
-      {step === 'PAYMENT' && activeBooking && (
+      {step === 'PAYMENT' && canRenderActiveBooking && activeBooking && (
         <div className="space-y-4 text-center">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Payment checkpoint</p>
@@ -1071,7 +1079,7 @@ export default function UserFlow() {
         </div>
       )}
 
-      {step === 'RATING' && activeBooking && (
+      {step === 'RATING' && canRenderActiveBooking && activeBooking && (
         <RatingScreen
           booking={activeBooking}
           myUserId={user}
