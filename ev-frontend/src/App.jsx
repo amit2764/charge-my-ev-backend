@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { useStore } from './store';
@@ -8,6 +8,13 @@ import UserFlow from './UserFlow';
 import HostFlow from './HostFlow';
 import PINSetup from './components/PINSetup';
 import PINUnlock from './components/PINUnlock';
+import UserHomeScreen from './screens/user/HomeScreen';
+import HostHomeScreen from './screens/host/HomeScreen';
+import MatchingScreen from './screens/user/MatchingScreen';
+import BookingConfirmScreen from './screens/BookingConfirmScreen';
+import ChargingSessionScreen from './screens/ChargingSessionScreen';
+import PaymentScreen from './screens/PaymentScreen';
+import RatingScreen from './screens/RatingScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SessionHistoryScreen from './screens/SessionHistoryScreen';
 import EarningsDashboardScreen from './screens/host/EarningsDashboardScreen';
@@ -16,6 +23,9 @@ import { DEFAULT_TAB_BY_ROLE, VALID_TABS_BY_ROLE, USER_TABS, HOST_TABS } from '.
 import { useThemeStore } from './hooks/useTheme';
 import useNearbyHosts from './hooks/useNearbyHosts';
 import { useI18n } from './i18n';
+import { resolveBookingState } from './resolveBookingState';
+import useSessionHistory from './hooks/useSessionHistory';
+import api from './api';
 
 function getDefaultTab(role) {
   return DEFAULT_TAB_BY_ROLE[role] || DEFAULT_TAB_BY_ROLE.user;
@@ -26,10 +36,24 @@ function isValidTab(role, tab) {
 }
 
 export default function App() {
-  const { user, role, setRole, logout, setUser, activeBooking, userProfile, hostProfile } = useStore();
+  const {
+    user,
+    role,
+    setRole,
+    logout,
+    setUser,
+    activeBooking,
+    activeRequest,
+    setActiveRequest,
+    setActiveBooking,
+    userProfile,
+    hostProfile,
+  } = useStore();
   const { isDark } = useThemeStore();
   const { t, setLanguage } = useI18n();
   const { hosts: nearbyHosts, filters: nearbyFilters, setFilters: setNearbyFilters } = useNearbyHosts(8);
+  const { items: userHistoryItems } = useSessionHistory({ userId: user, role: 'user', pageSize: 20 });
+  const { items: hostHistoryItems } = useSessionHistory({ userId: user, role: 'host', pageSize: 20 });
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [tabsByRole, setTabsByRole] = useState({
     user: DEFAULT_TAB_BY_ROLE.user,
@@ -37,6 +61,10 @@ export default function App() {
   });
   const [foregroundBanner, setForegroundBanner] = useState(null);
   const [discoveryFilters, setDiscoveryFilters] = useState([]);
+  const [flowLoading, setFlowLoading] = useState(false);
+  const [flowError, setFlowError] = useState('');
+  const [hostDashboardMode, setHostDashboardMode] = useState('modern');
+  const [isHostOnline, setIsHostOnline] = useState(false);
 
   const tx = (key, fallback) => {
     const val = t(key);
@@ -103,11 +131,175 @@ export default function App() {
   };
 
   const switchRoleFromProfile = (nextRole) => {
+    if (nextRole === 'host') {
+      setHostDashboardMode('modern');
+    }
     setRole(nextRole);
     setRoleTab(nextRole, 'profile');
   };
 
+  useEffect(() => {
+    if (effectiveRole !== 'host') return;
+    if (effectiveTab === HOST_TABS.DASHBOARD) {
+      setHostDashboardMode('modern');
+    }
+  }, [effectiveRole, effectiveTab]);
+
   const normalizedProfile = effectiveRole === 'host' ? (hostProfile || userProfile || {}) : (userProfile || hostProfile || {});
+  const bookingResolution = useMemo(() => resolveBookingState(activeBooking, user), [activeBooking, user]);
+
+  const syncActiveBookingFromBackend = useCallback(async (targetRole = role) => {
+    if (!user) return;
+    try {
+      const res = await api.get(`/api/bookings/active?userId=${encodeURIComponent(user)}&role=${encodeURIComponent(targetRole)}`);
+      const backendBooking = res.data?.booking || null;
+      if (backendBooking) {
+        setActiveBooking(backendBooking, targetRole);
+      } else {
+        setActiveBooking(null);
+      }
+    } catch {
+      // Keep current local booking if backend read fails temporarily.
+    }
+  }, [role, setActiveBooking, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    void syncActiveBookingFromBackend(role);
+    const timer = setInterval(() => {
+      void syncActiveBookingFromBackend(role);
+    }, 12000);
+    return () => clearInterval(timer);
+  }, [role, syncActiveBookingFromBackend, user]);
+
+  const userSummary = useMemo(() => {
+    const sessions = userHistoryItems || [];
+    const totalKwh = sessions.reduce((sum, item) => sum + Number(item.kwh || item.energyKwh || item.deliveredKwh || 0), 0);
+    const totalSpent = sessions.reduce((sum, item) => sum + Number(item.finalAmount || item.amount || 0), 0);
+    return {
+      sessions: sessions.length,
+      kwh: Number(totalKwh.toFixed(2)),
+      spent: Math.round(totalSpent),
+    };
+  }, [userHistoryItems]);
+
+  const hostSummary = useMemo(() => {
+    const sessions = hostHistoryItems || [];
+    const now = new Date();
+    const todayKey = now.toDateString();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+
+    let today = 0;
+    let monthTotal = 0;
+    for (const item of sessions) {
+      const amount = Number(item.finalAmount || item.amount || 0);
+      const dt = item.completedAt?.toDate?.() || (item.completedAt ? new Date(item.completedAt) : (item.date ? new Date(item.date) : null));
+      if (!dt || Number.isNaN(dt.getTime())) continue;
+      if (dt.toDateString() === todayKey) today += amount;
+      if (dt.getFullYear() === year && dt.getMonth() === month) monthTotal += amount;
+    }
+
+    return { today: Math.round(today), month: Math.round(monthTotal) };
+  }, [hostHistoryItems]);
+
+  const handleStartCharging = async (otp) => {
+    if (!activeBooking?.id || !otp) return;
+    setFlowLoading(true);
+    setFlowError('');
+    try {
+      const res = await api.post('/api/start', { bookingId: activeBooking.id, otp });
+      if (res.data?.booking) {
+        setActiveBooking(res.data.booking, 'user');
+      }
+      await syncActiveBookingFromBackend('user');
+    } catch (err) {
+      setFlowError(err.response?.data?.error || err.message || 'Failed to start charging.');
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  const handleStopCharging = async (otp) => {
+    if (!activeBooking?.id || !otp) return;
+    setFlowLoading(true);
+    setFlowError('');
+    try {
+      let res;
+      try {
+        res = await api.post('/api/session/stop', { bookingId: activeBooking.id, otp, userId: user });
+      } catch (primaryErr) {
+        if (primaryErr?.response?.status === 404) {
+          res = await api.post('/api/stop', { bookingId: activeBooking.id, otp });
+        } else {
+          throw primaryErr;
+        }
+      }
+
+      if (res.data?.booking) {
+        setActiveBooking(res.data.booking, 'user');
+      }
+      await syncActiveBookingFromBackend('user');
+    } catch (err) {
+      setFlowError(err.response?.data?.error || err.message || 'Failed to stop charging.');
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  const handleEmergencyStop = async () => {
+    if (!activeBooking?.id) return;
+    setFlowLoading(true);
+    setFlowError('');
+    try {
+      await api.post('/api/session/emergency-stop', { bookingId: activeBooking.id, userId: user });
+      await syncActiveBookingFromBackend('user');
+    } catch (err) {
+      setFlowError(err.response?.data?.error || err.message || 'Emergency stop failed.');
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  const handlePaymentConfirm = async (confirmRole) => {
+    if (!activeBooking?.id) return;
+    setFlowLoading(true);
+    setFlowError('');
+    try {
+      const res = await api.post(`/api/bookings/${activeBooking.id}/payment-confirm`, { role: confirmRole });
+      if (res.data?.booking) {
+        setActiveBooking(res.data.booking, confirmRole);
+      }
+      await syncActiveBookingFromBackend(confirmRole);
+    } catch (err) {
+      setFlowError(err.response?.data?.error || err.message || 'Payment confirmation failed.');
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  const handleRatingSubmit = async ({ rating, comment }) => {
+    if (!activeBooking?.id) return;
+    setFlowLoading(true);
+    setFlowError('');
+    try {
+      const toUserId = activeBooking.hostId || activeBooking.userId;
+      await api.post('/api/ratings', {
+        bookingId: activeBooking.id,
+        fromUserId: user,
+        toUserId,
+        role: 'user',
+        stars: Number(rating),
+        comment: String(comment || '').slice(0, 200),
+      });
+      setActiveBooking(null);
+      setActiveRequest(null);
+    } catch (err) {
+      setFlowError(err.response?.data?.error || err.message || 'Failed to submit rating.');
+    } finally {
+      setFlowLoading(false);
+    }
+  };
 
   const mappedDiscoveryChargers = useMemo(() => {
     return (nearbyHosts || []).map((host, idx) => ({
@@ -236,7 +428,127 @@ export default function App() {
       <div className="scrollbar-hide flex-1 overflow-y-auto overscroll-contain pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:px-1">
         {effectiveRole === 'user' ? (
           <>
-            {effectiveTab === USER_TABS.CHARGE && <UserFlow />}
+            {effectiveTab === USER_TABS.CHARGE && (
+              <>
+                {flowError && (
+                  <div className="mx-4 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800/60 dark:bg-rose-900/30 dark:text-rose-200">
+                    {flowError}
+                  </div>
+                )}
+
+                {!activeBooking && !activeRequest && (
+                  <UserHomeScreen
+                    user={{ displayName: normalizedProfile?.name || user, photoURL: normalizedProfile?.photoUrl || normalizedProfile?.avatar || '' }}
+                    stats={userSummary}
+                    activeBooking={null}
+                    nearbyChargers={mappedDiscoveryChargers.map((c) => ({
+                      id: c.id,
+                      hostName: c.hostName,
+                      rating: c.rating,
+                      distance: Number(c.distanceKm || 0).toFixed(1),
+                      pricePerKwh: c.pricePerKwh,
+                      connectorType: c.connectorType,
+                      available: c.status === 'AVAILABLE',
+                    }))}
+                    recentSessions={userHistoryItems}
+                    onMapPress={() => setRoleTab('user', USER_TABS.DISCOVER)}
+                    onSeeAllChargers={() => setRoleTab('user', USER_TABS.DISCOVER)}
+                    onChargerPress={(charger) => {
+                      const match = mappedDiscoveryChargers.find((c) => c.id === charger?.id);
+                      if (match?.raw) {
+                        localStorage.setItem('discoveryPrefillHost', JSON.stringify(match.raw));
+                      }
+                      setRoleTab('user', USER_TABS.DISCOVER);
+                    }}
+                    onContinueSession={() => {}}
+                  />
+                )}
+
+                {!activeBooking && activeRequest && (
+                  <MatchingScreen
+                    host={{ name: activeRequest?.hostName || tx('appShell.hostFallback', 'Host Charger') }}
+                    expiresInSeconds={58}
+                    onCancelRequest={() => setActiveRequest(null)}
+                    onExpire={() => setActiveRequest(null)}
+                  />
+                )}
+
+                {activeBooking && (bookingResolution.screen === 'CONFIRM' || bookingResolution.screen === 'CHARGING_WAIT') && (
+                  <BookingConfirmScreen
+                    role="user"
+                    booking={activeBooking}
+                    counterparty={{ name: activeBooking.hostName || tx('appShell.hostFallback', 'Host Charger') }}
+                    startPin={String(activeBooking?.startPin || activeBooking?.otp || '').slice(0, 4)}
+                    loading={flowLoading}
+                    onSubmitStartPin={handleStartCharging}
+                    onDirections={() => setRoleTab('user', USER_TABS.DISCOVER)}
+                  />
+                )}
+
+                {activeBooking && bookingResolution.screen === 'CHARGING_RUN' && (
+                  <ChargingSessionScreen
+                    loading={flowLoading}
+                    session={{
+                      startedAt: activeBooking.startTime || activeBooking.startedAt,
+                      kwhDelivered: Number(activeBooking.energyKwh || activeBooking.kwh || 0),
+                      powerKw: Number(activeBooking.powerKw || 7.2),
+                      ratePerKwh: Number(activeBooking.pricePerUnit || activeBooking.price || 22),
+                      mode: activeBooking.chargingMode || 'FAST',
+                      targetKwh: Number(activeBooking.targetKwh || 24),
+                      estimatedRemaining: activeBooking.estimatedRemaining || '00:45:00',
+                    }}
+                    onOpenChat={() => {}}
+                    onStopCharging={handleStopCharging}
+                    onEmergencyStop={handleEmergencyStop}
+                  />
+                )}
+
+                {activeBooking && bookingResolution.screen === 'PAYMENT' && (
+                  <PaymentScreen
+                    loading={flowLoading}
+                    paymentSubState={bookingResolution.subState}
+                    durationText={activeBooking.duration || '--'}
+                    kwhDelivered={Number(activeBooking.energyKwh || activeBooking.kwh || 0)}
+                    ratePerKwh={Number(activeBooking.pricePerUnit || activeBooking.price || 22)}
+                    subtotal={Number(activeBooking.subtotal || activeBooking.amount || activeBooking.finalAmount || 0)}
+                    promoDiscount={Number(activeBooking.promoDiscount || 0)}
+                    platformFee={Number(activeBooking.platformFee || 0)}
+                    total={Number(activeBooking.finalAmount || activeBooking.amount || 0)}
+                    paymentMethod={String(activeBooking.paymentMethod || 'CASH').toUpperCase()}
+                    upiId={activeBooking.upiId || ''}
+                    host={{ name: activeBooking.hostName || tx('appShell.hostFallback', 'Host Charger') }}
+                    user={{ name: normalizedProfile?.name || user }}
+                    elapsedMinutes={Number(activeBooking.elapsedMinutes || 0)}
+                    autoResolveSecondsRemaining={Number(activeBooking.autoResolveSecondsRemaining || 0)}
+                    onUserConfirmPaid={() => handlePaymentConfirm('user')}
+                    onOpenChat={() => {}}
+                    onExitForNow={() => setRoleTab('user', USER_TABS.CHARGE)}
+                  />
+                )}
+
+                {activeBooking && bookingResolution.screen === 'RATING' && (
+                  <RatingScreen
+                    loading={flowLoading}
+                    role="user"
+                    party={{ name: activeBooking.hostName || tx('appShell.hostFallback', 'Host Charger') }}
+                    summary={{
+                      kwh: Number(activeBooking.energyKwh || activeBooking.kwh || 0),
+                      duration: activeBooking.duration || '--',
+                      amount: Number(activeBooking.finalAmount || activeBooking.amount || 0),
+                    }}
+                    onSubmitRating={handleRatingSubmit}
+                    onSkip={() => {
+                      setActiveBooking(null);
+                      setActiveRequest(null);
+                    }}
+                  />
+                )}
+
+                {activeBooking && !['CONFIRM', 'CHARGING_WAIT', 'CHARGING_RUN', 'PAYMENT', 'RATING'].includes(bookingResolution.screen) && (
+                  <UserFlow />
+                )}
+              </>
+            )}
             {effectiveTab === USER_TABS.DISCOVER && (
               <UserDiscoveryMapScreen
                 isDark={isDark}
@@ -294,7 +606,27 @@ export default function App() {
           </>
         ) : (
           <>
-            {effectiveTab === HOST_TABS.DASHBOARD && <HostFlow />}
+            {effectiveTab === HOST_TABS.DASHBOARD && (
+              hostDashboardMode === 'legacy' ? (
+                <HostFlow />
+              ) : (
+                <HostHomeScreen
+                  host={{ displayName: normalizedProfile?.name || user, photoURL: normalizedProfile?.photoUrl || normalizedProfile?.avatar || '' }}
+                  isOnline={isHostOnline}
+                  onToggleOnline={setIsHostOnline}
+                  activeBooking={activeBooking}
+                  pendingRequests={[]}
+                  earnings={hostSummary}
+                  chargers={Array.isArray(normalizedProfile?.chargers) ? normalizedProfile.chargers : []}
+                  recentActivity={hostHistoryItems}
+                  onManageSession={() => setHostDashboardMode('legacy')}
+                  onReviewRequests={() => setHostDashboardMode('legacy')}
+                  onOpenEarnings={() => setRoleTab('host', HOST_TABS.EARNINGS)}
+                  onAddCharger={() => setRoleTab('host', HOST_TABS.PROFILE)}
+                  onOpenCharger={() => setHostDashboardMode('legacy')}
+                />
+              )
+            )}
             {effectiveTab === HOST_TABS.EARNINGS && (
               <EarningsDashboardScreen
                 booking={activeBooking}
