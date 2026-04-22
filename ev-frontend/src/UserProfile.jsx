@@ -6,7 +6,7 @@ import useReport from './hooks/useReport';
 import KYCScreen from './screens/KYCScreen';
 import VerifiedBadge from './components/VerifiedBadge';
 
-export default function UserProfile() {
+export default function UserProfile({ onSwitchRole }) {
   const { user, role, userProfile, setUserProfile } = useStore();
   const [isEditing, setIsEditing] = useState(false);
   const [showKycScreen, setShowKycScreen] = useState(false);
@@ -67,7 +67,7 @@ export default function UserProfile() {
     };
 
     loadBlockedUsers();
-  }, [role, user]);
+  }, [role, user, getBlockedUsers]);
 
   const handleUnblock = async (blockedUserId) => {
     try {
@@ -134,6 +134,32 @@ export default function UserProfile() {
         </div>
         {!isEditing && <button onClick={() => setIsEditing(true)} className="glass-surface rounded-[18px] px-4 py-2 text-cyan-300 font-semibold">Edit</button>}
       </div>
+
+      <Card>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="mb-1 text-base font-bold text-cyan-300">App mode</h3>
+            <p className="text-sm text-gray-400">Switch between charging as a user and managing sessions as a host.</p>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+            {role}
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <button
+            onClick={() => onSwitchRole?.('user')}
+            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(59,130,246,0.24)]' : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+          >
+            User mode
+          </button>
+          <button
+            onClick={() => onSwitchRole?.('host')}
+            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'host' ? 'bg-gradient-to-r from-emerald-400 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(34,197,94,0.22)]' : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+          >
+            Host mode
+          </button>
+        </div>
+      </Card>
 
       {/* Trust Score Banner */}
       <div className="glass-surface overflow-hidden rounded-[28px] border border-blue-400/12 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_40%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(17,24,39,0.82))] p-5 shadow-[0_24px_60px_rgba(59,130,246,0.16)]">

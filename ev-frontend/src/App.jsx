@@ -85,9 +85,9 @@ export default function App() {
     }));
   };
 
-  const switchRole = (nextRole) => {
+  const switchRoleFromProfile = (nextRole) => {
     setRole(nextRole);
-    setRoleTab(nextRole, tabsByRole[nextRole]);
+    setRoleTab(nextRole, 'profile');
   };
 
   const forcePhoneOtp = () => {
@@ -151,21 +151,11 @@ export default function App() {
       
       {/* Global Mobile Header */}
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-[linear-gradient(180deg,rgba(2,6,23,0.86),rgba(2,6,23,0.68))] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.55rem)] backdrop-blur-xl sm:px-4 md:px-5 md:pb-4 md:pt-4">
-        
-        {/* CRITICAL: Top-Level Role Toggle */}
-        <div className="glass-surface flex min-w-0 flex-1 rounded-[22px] p-1.5 shadow-[0_16px_40px_rgba(2,6,23,0.26)]">
-          <button
-            onClick={() => switchRole('user')}
-            className={`min-h-[44px] min-w-0 flex-1 rounded-[16px] px-3 py-2.5 text-[12px] font-bold tracking-[0.08em] transition-all sm:px-4 sm:text-xs ${effectiveRole === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(59,130,246,0.28)]' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}
-          >
-            User Mode
-          </button>
-          <button
-            onClick={() => switchRole('host')}
-            className={`min-h-[44px] min-w-0 flex-1 rounded-[16px] px-3 py-2.5 text-[12px] font-bold tracking-[0.08em] transition-all sm:px-4 sm:text-xs ${effectiveRole === 'host' ? 'bg-gradient-to-r from-emerald-400 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(34,197,94,0.24)]' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}
-          >
-            Host Mode
-          </button>
+        <div className="min-w-0 flex-1 px-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Charge My EV</p>
+          <h1 className="truncate text-lg font-black text-white sm:text-xl">
+            {effectiveRole === 'host' ? 'Host workspace' : 'User workspace'}
+          </h1>
         </div>
 
         <button onClick={logout} className="glass-surface shrink-0 rounded-[18px] px-4 py-2 text-sm font-bold text-red-300 transition hover:border-red-400/30 hover:text-red-200">
@@ -187,13 +177,13 @@ export default function App() {
               />
             )}
             {effectiveTab === USER_TABS.HISTORY && <UserHistory />}
-            {effectiveTab === USER_TABS.PROFILE && <UserProfile />}
+            {effectiveTab === USER_TABS.PROFILE && <UserProfile onSwitchRole={switchRoleFromProfile} />}
           </>
         ) : (
           <>
             {effectiveTab === HOST_TABS.DASHBOARD && <HostFlow />}
             {effectiveTab === HOST_TABS.EARNINGS && <HostEarnings />}
-            {effectiveTab === HOST_TABS.PROFILE && <UserProfile />}
+            {effectiveTab === HOST_TABS.PROFILE && <UserProfile onSwitchRole={switchRoleFromProfile} />}
           </>
         )}
       </div>

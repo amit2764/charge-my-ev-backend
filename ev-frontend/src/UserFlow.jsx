@@ -93,6 +93,7 @@ function canRenderUserBooking(booking, userId, bookingRole) {
 export default function UserFlow() {
   const { user, userProfile, activeRequest, setActiveRequest, activeBooking, activeBookingRole, setActiveBooking, setBookingStep } = useStore();
   const [step, setStep] = useState('REQUEST'); // REQUEST, MATCHING, CONFIRM, CHARGING, PAYMENT, RATING
+  const [initialBookingSyncComplete, setInitialBookingSyncComplete] = useState(false);
   const [hosts, setHosts] = useState([]);
   const [selectedHost, setSelectedHost] = useState(null);
   const [acceptedHost, setAcceptedHost] = useState(null); // { hostId, expiresInSeconds, price, estimatedArrival }
@@ -108,7 +109,7 @@ export default function UserFlow() {
   const [preferredHostId, setPreferredHostId] = useState(null);
   const [promoCode, setPromoCode] = useState('');
   const { validating, error: promoError, discount, appliedCode, validateCode } = usePromoCode();
-  const canRenderActiveBooking = canRenderUserBooking(activeBooking, user, activeBookingRole);
+  const canRenderActiveBooking = initialBookingSyncComplete && canRenderUserBooking(activeBooking, user, activeBookingRole);
   const flowIndex = getFlowIndex(step, canRenderActiveBooking ? activeBooking : null);
   const hasValidUser = isValidUserId(user);
   const { unreadCount } = useChat(activeBooking, user);
@@ -210,6 +211,8 @@ export default function UserFlow() {
       applyBookingResolution(booking, { preserveInFlightRequest: true });
     } catch {
       // Keep current screen and retry on next trigger.
+    } finally {
+      setInitialBookingSyncComplete(true);
     }
   }, [user, hasValidUser, activeBooking?.userId, setActiveBooking, setBookingStep, step, applyBookingResolution]);
 
@@ -492,6 +495,7 @@ export default function UserFlow() {
   }, [user, hasValidUser, activeRequest?.id, preferredHostId, setActiveBooking, syncStateFromBackend, syncRequestStateFromBackend, applyBookingResolution]);
 
   useEffect(() => {
+    setInitialBookingSyncComplete(false);
     syncStateFromBackend();
     if (activeRequest?.id) {
       syncRequestStateFromBackend(activeRequest.id);
