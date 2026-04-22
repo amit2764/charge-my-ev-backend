@@ -13,6 +13,7 @@ import PINSetup from './components/PINSetup';
 import PINUnlock from './components/PINUnlock';
 import DiscoveryMapScreen from './screens/DiscoveryMapScreen';
 import { DEFAULT_TAB_BY_ROLE, VALID_TABS_BY_ROLE, USER_TABS, HOST_TABS } from './navigation';
+import { useThemeStore } from './hooks/useTheme';
 
 function getDefaultTab(role) {
   return DEFAULT_TAB_BY_ROLE[role] || DEFAULT_TAB_BY_ROLE.user;
@@ -24,6 +25,7 @@ function isValidTab(role, tab) {
 
 export default function App() {
   const { user, role, setRole, logout, setUser } = useStore();
+  const { isDark } = useThemeStore();
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [tabsByRole, setTabsByRole] = useState({
     user: DEFAULT_TAB_BY_ROLE.user,
@@ -57,6 +59,11 @@ export default function App() {
     });
     return () => unsub();
   }, [user]);
+
+  // Apply data-theme attribute so CSS variables and dark: Tailwind classes respond
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   const authGate = useMemo(() => {
     const rememberedUser = localStorage.getItem('authUser') || localStorage.getItem('user') || null;
@@ -99,8 +106,8 @@ export default function App() {
 
   if (!firebaseReady) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#020617]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f5fffc] dark:bg-[#0A0A0F]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-300/40 border-t-teal-500 dark:border-teal-700/40 dark:border-t-teal-400" />
       </div>
     );
   }
@@ -131,10 +138,10 @@ export default function App() {
   if (!user) return <LoginScreen />;
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-none bg-transparent text-gray-200 md:min-h-screen md:max-w-6xl md:px-4 md:py-5">
-      <div className="relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden border border-white/5 bg-[linear-gradient(180deg,rgba(2,6,23,0.92),rgba(15,23,42,0.82))] shadow-[0_30px_80px_rgba(2,6,23,0.45)] md:rounded-[32px]">
-      <div className="ambient-orb left-[-90px] top-[-60px] h-48 w-48 bg-blue-500/30" />
-      <div className="ambient-orb right-[-80px] top-20 h-40 w-40 bg-emerald-500/20" />
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-none bg-transparent text-slate-800 dark:text-slate-100 md:min-h-screen md:max-w-6xl md:px-4 md:py-5">
+      <div className="relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden border border-teal-100 dark:border-slate-700/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,253,250,0.94))] dark:bg-[linear-gradient(180deg,rgba(14,17,26,0.99),rgba(20,23,32,0.98))] shadow-[0_30px_80px_rgba(13,148,136,0.12)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.5)] md:rounded-[32px]">
+      <div className="ambient-orb left-[-90px] top-[-60px] h-48 w-48 bg-teal-300/30" />
+      <div className="ambient-orb right-[-80px] top-20 h-40 w-40 bg-emerald-300/20" />
       {foregroundBanner && (
         <div
           role="alert"
@@ -142,23 +149,24 @@ export default function App() {
             if (foregroundBanner.deepLink) window.location.href = foregroundBanner.deepLink;
             setForegroundBanner(null);
           }}
-          className="fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] z-[2000] mx-auto max-w-md cursor-pointer rounded-[24px] border border-blue-400/20 bg-[linear-gradient(135deg,rgba(30,41,59,0.95),rgba(15,23,42,0.92))] px-4 py-3 shadow-[0_20px_50px_rgba(59,130,246,0.18)] backdrop-blur-xl"
+          className="fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] z-[2000] mx-auto max-w-md cursor-pointer rounded-[24px] border border-teal-200 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(239,253,250,0.95))] px-4 py-3 shadow-[0_20px_50px_rgba(13,148,136,0.14)] backdrop-blur-xl"
+          className="fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] z-[2000] mx-auto max-w-md cursor-pointer rounded-[24px] border border-teal-200 dark:border-teal-800/50 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(239,253,250,0.95))] dark:bg-[linear-gradient(135deg,rgba(20,23,32,0.98),rgba(26,31,43,0.95))] px-4 py-3 shadow-[0_20px_50px_rgba(13,148,136,0.14)] backdrop-blur-xl"
         >
-          <p className="text-sm font-bold text-cyan-300">{foregroundBanner.title}</p>
-          {foregroundBanner.body && <p className="mt-0.5 text-xs text-cyan-200">{foregroundBanner.body}</p>}
+          <p className="text-sm font-bold text-teal-700 dark:text-teal-300">{foregroundBanner.title}</p>
+          {foregroundBanner.body && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">{foregroundBanner.body}</p>}
         </div>
       )}
       
       {/* Global Mobile Header */}
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-[linear-gradient(180deg,rgba(2,6,23,0.86),rgba(2,6,23,0.68))] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.55rem)] backdrop-blur-xl sm:px-4 md:px-5 md:pb-4 md:pt-4">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-teal-100 dark:border-slate-700/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,254,252,0.9))] dark:bg-[linear-gradient(180deg,rgba(14,17,26,0.98),rgba(20,23,32,0.96))] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.55rem)] backdrop-blur-xl sm:px-4 md:px-5 md:pb-4 md:pt-4">
         <div className="min-w-0 flex-1 px-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Charge My EV</p>
-          <h1 className="truncate text-lg font-black text-white sm:text-xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-600 dark:text-teal-400">Charge My EV</p>
+          <h1 className="truncate text-lg font-black text-slate-900 dark:text-white sm:text-xl">
             {effectiveRole === 'host' ? 'Host workspace' : 'User workspace'}
           </h1>
         </div>
 
-        <button onClick={logout} className="glass-surface shrink-0 rounded-[18px] px-4 py-2 text-sm font-bold text-red-300 transition hover:border-red-400/30 hover:text-red-200">
+        <button onClick={logout} className="glass-surface shrink-0 rounded-[18px] px-4 py-2 text-sm font-bold text-rose-600 transition hover:border-rose-200 hover:text-rose-700">
           Logout
         </button>
       </header>
@@ -189,21 +197,21 @@ export default function App() {
       </div>
 
       {/* Role Switcher (Bottom Nav) */}
-      <div className="sticky bottom-0 z-20 border-t border-white/5 bg-[linear-gradient(180deg,rgba(2,6,23,0.58),rgba(2,6,23,0.92))] px-2 pb-[env(safe-area-inset-bottom,0px)] pt-2 backdrop-blur-xl md:px-4 md:pb-3">
-        <div className="glass-surface flex w-full items-center rounded-[28px] px-1.5 py-1.5 shadow-[0_20px_50px_rgba(2,6,23,0.35)]">
+      <div className="sticky bottom-0 z-20 border-t border-teal-100 dark:border-slate-700/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(246,254,251,0.96))] dark:bg-[linear-gradient(180deg,rgba(14,17,26,0.88),rgba(20,23,32,0.97))] px-2 pb-[env(safe-area-inset-bottom,0px)] pt-2 backdrop-blur-xl md:px-4 md:pb-3">
+        <div className="glass-surface flex w-full items-center rounded-[28px] px-1.5 py-1.5 shadow-[0_20px_50px_rgba(13,148,136,0.12)]">
         {effectiveRole === 'user' ? (
           <>
-            <button onClick={() => setRoleTab('user', USER_TABS.CHARGE)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.CHARGE ? 'bg-blue-500/18 text-blue-300 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.24)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>⚡ Charge</button>
-            <button onClick={() => setRoleTab('user', USER_TABS.DISCOVER)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.DISCOVER ? 'bg-blue-500/18 text-blue-300 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.24)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>🗺️ Discover</button>
-            <button onClick={() => setRoleTab('user', USER_TABS.HISTORY)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.HISTORY ? 'bg-blue-500/18 text-blue-300 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.24)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>🕒 History</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.CHARGE)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.CHARGE ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>⚡ Charge</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.DISCOVER)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.DISCOVER ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🗺️ Discover</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.HISTORY)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.HISTORY ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🕒 History</button>
           </>
         ) : (
           <>
-            <button onClick={() => setRoleTab('host', HOST_TABS.DASHBOARD)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.DASHBOARD ? 'bg-emerald-500/16 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.2)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>🏠 Dashboard</button>
-            <button onClick={() => setRoleTab('host', HOST_TABS.EARNINGS)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.EARNINGS ? 'bg-emerald-500/16 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(34,197,94,0.2)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>💰 Earnings</button>
+            <button onClick={() => setRoleTab('host', HOST_TABS.DASHBOARD)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.DASHBOARD ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>🏠 Dashboard</button>
+            <button onClick={() => setRoleTab('host', HOST_TABS.EARNINGS)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.EARNINGS ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>💰 Earnings</button>
           </>
         )}
-        <button onClick={() => setRoleTab(effectiveRole, 'profile')} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.PROFILE || effectiveTab === HOST_TABS.PROFILE ? 'bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>👤 Profile</button>
+        <button onClick={() => setRoleTab(effectiveRole, 'profile')} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.PROFILE || effectiveTab === HOST_TABS.PROFILE ? 'bg-slate-900/8 text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.08)]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>👤 Profile</button>
         </div>
       </div>
       

@@ -780,17 +780,17 @@ export default function UserFlow() {
     <div className="flow-shell p-4 pb-6 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Peer charging</p>
-          <h1 className="mt-1 text-3xl font-black tracking-[-0.04em] text-white">Charge on demand</h1>
-          <p className="mt-1 text-sm text-slate-400">Tesla-grade clarity for finding, matching, charging, and settling in one flow.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-600">Peer charging</p>
+          <h1 className="mt-1 text-3xl font-black tracking-[-0.04em] text-slate-900">Charge on demand</h1>
+          <p className="mt-1 text-sm text-slate-600">Clean white surfaces, realtime matching, charging, and payment in one flow.</p>
         </div>
         <div className="glass-surface hidden rounded-[20px] px-4 py-3 md:block">
           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Status</p>
-          <p className="mt-1 text-sm font-semibold text-cyan-300">{step}</p>
+          <p className="mt-1 text-sm font-semibold text-teal-700">{step}</p>
         </div>
       </div>
 
-      {error && <div className="glass-surface mb-4 rounded-[20px] border border-red-500/20 bg-red-900/20 p-3 text-sm text-red-300 animate-pulse">{error}</div>}
+      {error && <div className="glass-surface mb-4 rounded-[20px] border border-red-300 bg-red-50 p-3 text-sm text-red-600 animate-pulse">{error}</div>}
 
       <div className="flow-rail">
         {FLOW_STEPS.map((label, index) => (
@@ -805,38 +805,38 @@ export default function UserFlow() {
 
       {step === 'REQUEST' && (
         <div className="space-y-4">
-          <div className="overflow-hidden rounded-[28px] border border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-blue-500/12 to-slate-900/70 p-5 shadow-[0_20px_60px_rgba(34,211,238,0.18)]">
+          <div className="overflow-hidden rounded-[28px] border border-teal-200 bg-gradient-to-br from-white via-teal-50 to-emerald-50 p-5 shadow-[0_20px_60px_rgba(13,148,136,0.1)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">Screen 1</p>
-                <h2 className="mt-1 text-3xl font-black tracking-[-0.03em] text-white">Request Charge</h2>
-                <p className="mt-3 max-w-sm text-sm text-cyan-50/85">Find a nearby host with live pricing, verified identity badges, and minimal waiting time.</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-600">Screen 1</p>
+                <h2 className="mt-1 text-3xl font-black tracking-[-0.03em] text-slate-900">Request Charge</h2>
+                <p className="mt-3 max-w-sm text-sm text-slate-600">Find a nearby host with live pricing, verified identity badges, and minimal waiting time.</p>
               </div>
-              <span className="rounded-full border border-cyan-300/40 bg-cyan-400/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+              <span className="rounded-full border border-teal-300 bg-teal-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-700">
                 {UI_REFRESH_TAG}
               </span>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="floating-chip"><span className="live-dot" /> Auto locate</span>
-              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-100">Fastest first-match routing</span>
-              <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-100">Realtime availability scan</span>
+              <span className="rounded-full border border-teal-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700">Fastest first-match routing</span>
+              <span className="rounded-full border border-teal-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700">Realtime availability scan</span>
             </div>
           </div>
           {activeBooking?.status === 'COMPLETED' && isPendingPaymentStatus(activeBooking?.paymentStatus) && (
-            <Card className="border border-amber-700 bg-amber-900/20">
-              <p className="text-sm text-amber-300">You have a pending payment from your last session.</p>
+            <Card className="border border-amber-300 bg-amber-50">
+              <p className="text-sm text-amber-700">You have a pending payment from your last session.</p>
               <Button className="mt-3" onClick={() => setStep('PAYMENT')}>Resume Payment</Button>
             </Card>
           )}
-          <Card className="overflow-hidden border border-cyan-500/20 bg-slate-950/70">
+          <Card className="overflow-hidden border border-teal-200 bg-white/90">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Smart request</p>
-                <h3 className="mt-1 text-lg font-bold text-white">Instant trip setup</h3>
+                <h3 className="mt-1 text-lg font-bold text-slate-900">Instant trip setup</h3>
               </div>
-              <div className="rounded-[18px] border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-right">
+              <div className="rounded-[18px] border border-teal-200 bg-teal-50 px-3 py-2 text-right">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Vehicle</p>
-                <p className="text-sm font-bold text-cyan-300">EV Ready</p>
+                <p className="text-sm font-bold text-teal-700">EV Ready</p>
               </div>
             </div>
             <Input label="Vehicle Type" value={userProfile?.vehicleType || 'Electric Sedan'} disabled />
@@ -859,30 +859,30 @@ export default function UserFlow() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Screen 2</p>
-              <h2 className="text-2xl font-black text-white">Available Hosts</h2>
+              <h2 className="text-2xl font-black text-slate-900">Available Hosts</h2>
             </div>
-            <button onClick={() => { setStep('REQUEST'); setAcceptedHost(null); setHosts([]); }} className="glass-surface min-h-[44px] rounded-[18px] px-4 py-2.5 text-sm font-semibold text-cyan-300">Cancel</button>
+            <button onClick={() => { setStep('REQUEST'); setAcceptedHost(null); setHosts([]); }} className="glass-surface min-h-[44px] rounded-[18px] px-4 py-2.5 text-sm font-semibold text-teal-700">Cancel</button>
           </div>
 
           {/* Show accepted host at the top (first-responder like Uber) */}
           {acceptedHost && acceptanceCountdown > 0 && (
-            <Card className="border-2 border-yellow-500/40 bg-yellow-900/20 shadow-[0_18px_40px_rgba(234,179,8,0.16)]">
+            <Card className="border-2 border-amber-300 bg-amber-50 shadow-[0_18px_40px_rgba(245,158,11,0.12)]">
               <div className="text-center mb-4">
-                <p className="text-yellow-400 font-bold text-sm">✓ OFFER LOCKED - Confirm within {acceptanceCountdown}s</p>
-                <p className="text-xs text-yellow-300 mt-1">First host to accept your request</p>
+                <p className="text-amber-700 font-bold text-sm">✓ OFFER LOCKED - Confirm within {acceptanceCountdown}s</p>
+                <p className="text-xs text-amber-600 mt-1">First host to accept your request</p>
               </div>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="premium-number font-black text-2xl text-white">${acceptedHost.price}/hr</p>
-                  <p className="text-sm text-gray-400">Locked • ETA: {acceptedHost.estimatedArrival} mins • ⭐ 4.9</p>
+                  <p className="premium-number font-black text-2xl text-slate-900">${acceptedHost.price}/hr</p>
+                  <p className="text-sm text-slate-600">Locked • ETA: {acceptedHost.estimatedArrival} mins • ⭐ 4.9</p>
                 </div>
-                <Button onClick={() => selectHost({ ...acceptedHost, hostId: acceptedHost.hostId })} className="w-full px-6 py-2 bg-yellow-600 hover:bg-yellow-700 sm:w-auto">Confirm Now</Button>
+                <Button onClick={() => selectHost({ ...acceptedHost, hostId: acceptedHost.hostId })} className="w-full px-6 py-2 sm:w-auto">Confirm Now</Button>
               </div>
             </Card>
           )}
 
-          {hosts.length === 0 && !acceptedHost ? <div className="glass-surface skeleton-shimmer py-10 text-center text-gray-500">Broadcasting your request to nearby hosts...</div> : null}
-          {hosts.length === 0 && acceptedHost && acceptanceCountdown <= 0 ? <div className="glass-surface skeleton-shimmer py-10 text-center text-gray-500">Offer expired. Broadcasting your request to nearby hosts...</div> : null}
+          {hosts.length === 0 && !acceptedHost ? <div className="glass-surface skeleton-shimmer py-10 text-center text-slate-500">Broadcasting your request to nearby hosts...</div> : null}
+          {hosts.length === 0 && acceptedHost && acceptanceCountdown <= 0 ? <div className="glass-surface skeleton-shimmer py-10 text-center text-slate-500">Offer expired. Broadcasting your request to nearby hosts...</div> : null}
 
           {/* Show all hosts, but accepted one should already be selected if user confirmed */}
           {hosts
@@ -892,12 +892,12 @@ export default function UserFlow() {
               <Card key={h.id} className="flex flex-col gap-4 opacity-90 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-gradient-to-br from-blue-500/30 to-emerald-400/20 text-sm font-black text-white">{String(h.hostId || 'H').slice(-2)}</div>
-                    <p className="premium-number font-black text-xl text-white">${h.price}/hr</p>
+                    <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-gradient-to-br from-teal-500/20 to-emerald-300/30 text-sm font-black text-slate-900">{String(h.hostId || 'H').slice(-2)}</div>
+                    <p className="premium-number font-black text-xl text-slate-900">${h.price}/hr</p>
                     {(h.verified || hostVerificationMap[String(h.hostId || '').trim()]) && <VerifiedBadge />}
                   </div>
-                  <p className="text-sm text-gray-400">{h.distance || '1.2'} km away • ETA: {h.estimatedArrival} mins • ⭐ 4.9</p>
-                  {h.address && <p className="text-xs text-gray-500 mt-1">📍 {h.address} {h.landmark ? `(${h.landmark})` : ''}</p>}
+                  <p className="text-sm text-slate-600">{h.distance || '1.2'} km away • ETA: {h.estimatedArrival} mins • ⭐ 4.9</p>
+                  {h.address && <p className="text-xs text-slate-500 mt-1">📍 {h.address} {h.landmark ? `(${h.landmark})` : ''}</p>}
                 </div>
                 <Button onClick={() => selectHost(h)} className="w-full px-6 py-2 sm:w-auto" disabled={!!acceptedHost && acceptanceCountdown > 0}>Select</Button>
               </Card>
@@ -910,19 +910,19 @@ export default function UserFlow() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Screen 3</p>
-              <h2 className="text-2xl font-black text-white">Confirm Booking</h2>
+              <h2 className="text-2xl font-black text-slate-900">Confirm Booking</h2>
             </div>
-            <button onClick={() => setStep('MATCHING')} className="glass-surface min-h-[44px] rounded-[18px] px-4 py-2.5 text-sm font-semibold text-cyan-300">Back</button>
+            <button onClick={() => setStep('MATCHING')} className="glass-surface min-h-[44px] rounded-[18px] px-4 py-2.5 text-sm font-semibold text-teal-700">Back</button>
           </div>
           <Card className="overflow-hidden">
             <div className="mb-6 space-y-2">
-              <div className="flex items-center justify-between"><span className="text-gray-400">Host ID</span><span className="text-white font-bold">{String(selectedHost.hostId || '----').slice(-4)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-slate-500">Host ID</span><span className="text-slate-900 font-bold">{String(selectedHost.hostId || '----').slice(-4)}</span></div>
               {(selectedHost.verified || hostVerificationMap[String(selectedHost.hostId || '').trim()]) && (
                 <div className="flex justify-end"><VerifiedBadge /></div>
               )}
-              <div className="flex justify-between"><span className="text-gray-400">Distance</span><span className="text-white font-bold">{selectedHost.estimatedArrival} mins away</span></div>
-              <div className="flex justify-between"><span className="text-gray-400">Rate</span><span className="text-white font-bold">${selectedHost.price}/hr</span></div>
-              {selectedHost.address && <div className="text-sm text-gray-400 mt-2 border-t border-gray-800 pt-2">📍 {selectedHost.address} {selectedHost.landmark ? `(${selectedHost.landmark})` : ''}</div>}
+              <div className="flex justify-between"><span className="text-slate-500">Distance</span><span className="text-slate-900 font-bold">{selectedHost.estimatedArrival} mins away</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Rate</span><span className="text-slate-900 font-bold">${selectedHost.price}/hr</span></div>
+              {selectedHost.address && <div className="text-sm text-slate-500 mt-2 border-t border-slate-200 pt-2">📍 {selectedHost.address} {selectedHost.landmark ? `(${selectedHost.landmark})` : ''}</div>}
             </div>
             <Button onClick={confirmBooking} disabled={loading}>{loading ? 'Confirming...' : 'Confirm Booking'}</Button>
             {selectedHost.location && (
@@ -937,12 +937,12 @@ export default function UserFlow() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Screen 4</p>
-              <h2 className="text-2xl font-black text-white">Live Session</h2>
+              <h2 className="text-2xl font-black text-slate-900">Live Session</h2>
             </div>
             {canOpenChat && (
               <button
                 onClick={() => setChatOpen(true)}
-                className="relative min-h-[44px] rounded-[14px] border border-gray-700 px-3.5 py-2.5 text-sm font-semibold text-cyan-300 hover:bg-gray-900"
+                className="relative min-h-[44px] rounded-[14px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-teal-700 hover:bg-teal-50"
               >
                 Chat
                 {unreadCount > 0 && (
@@ -961,14 +961,14 @@ export default function UserFlow() {
                 <span className="status-dot" />
                 Host pairing in progress
               </div>
-              <p className="text-gray-300 mb-2 text-sm">Show this PIN to your host to start charging</p>
+              <p className="text-slate-600 mb-2 text-sm">Show this PIN to your host to start charging</p>
               <div className="my-6 pin-display inline-block w-full">
                 <p className="text-xs text-cyan-300 uppercase tracking-widest mb-2">Start PIN</p>
                 <p className="pin-text">
                   {activeBooking.startPin || '----'}
                 </p>
               </div>
-              <p className="text-xs text-gray-400 mt-2">Host enters this code and charging starts instantly.</p>
+              <p className="text-xs text-slate-500 mt-2">Host enters this code and charging starts instantly.</p>
               <div className="flex gap-2 mt-4">
                 {selectedHost?.location && (
                   <Button variant="outline" className="flex-1 py-2 text-xs" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedHost.location.lat},${selectedHost.location.lng}`, '_blank')}>🗺️ Navigate to Host</Button>
@@ -981,11 +981,11 @@ export default function UserFlow() {
           {activeBooking.status === 'STARTED' && (
             <Card className="tesla-panel text-center py-8">
               {!hostOnline && (
-                <div className="mb-4 rounded-lg border border-amber-700 bg-amber-900/30 px-3 py-2 text-left text-sm text-amber-300">
+                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left text-sm text-amber-700">
                   Host appears offline. You can use Emergency Stop to prevent the session from being stuck.
                 </div>
               )}
-              <p className="text-xs text-green-300 uppercase tracking-widest mb-3">Charging Started</p>
+              <p className="text-xs text-emerald-600 uppercase tracking-widest mb-3">Charging Started</p>
               <div className="battery-wrap">
                 <div className="battery" style={{ '--battery-level': `${Math.min(95, 18 + Math.floor(elapsedSeconds / 15))}%` }}>
                   <div className="battery-fill" />
@@ -993,9 +993,9 @@ export default function UserFlow() {
                 </div>
               </div>
               <div className="my-4">
-                <p className="text-5xl font-mono text-white mb-2">{formatTime(elapsedSeconds)}</p>
-                <p className="premium-number text-3xl text-cyan-300 font-black">${runningCost}</p>
-                <p className="text-xs text-gray-500 mt-1">Running cost @ ${activeBooking.price}/hr</p>
+                <p className="text-5xl font-mono text-slate-900 mb-2">{formatTime(elapsedSeconds)}</p>
+                <p className="premium-number text-3xl text-teal-700 font-black">${runningCost}</p>
+                <p className="text-xs text-slate-500 mt-1">Running cost @ ${activeBooking.price}/hr</p>
               </div>
               <div className="my-6 pin-display inline-block w-full">
                 <p className="text-xs text-orange-300 uppercase tracking-widest mb-2">Stop PIN</p>
@@ -1003,11 +1003,11 @@ export default function UserFlow() {
                   {activeBooking.stopPin || '----'}
                 </p>
               </div>
-              <p className="text-xs text-gray-400">Show this PIN to your host when done charging.</p>
+              <p className="text-xs text-slate-500">Show this PIN to your host when done charging.</p>
 
               {/* ── Charging mode toggle ── */}
               <div className="mt-5">
-                <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Charging Mode</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Charging Mode</p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                   {[{ id: 'eco', label: '🌿 Eco', hint: '−20%' }, { id: 'normal', label: '⚡ Normal', hint: '×1' }, { id: 'boost', label: '🚀 Boost', hint: '+20%' }].map(({ id, label, hint }) => {
                     const active = (activeBooking.chargingMode || 'normal') === id;
@@ -1016,7 +1016,7 @@ export default function UserFlow() {
                         key={id}
                         onClick={() => changeMode(id)}
                         disabled={loading}
-                        className={`min-h-[46px] flex-1 rounded-[14px] border-2 py-2.5 text-sm font-semibold transition-all ${active ? 'border-cyan-500 bg-cyan-900/40 text-cyan-300' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                        className={`min-h-[46px] flex-1 rounded-[14px] border-2 py-2.5 text-sm font-semibold transition-all ${active ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-slate-200 bg-white text-slate-500 hover:border-teal-300'}`}
                       >
                         {label}<br /><span className="text-xs opacity-70">{hint}</span>
                       </button>
@@ -1029,7 +1029,7 @@ export default function UserFlow() {
               <button
                 onClick={emergencyStop}
                 disabled={loading}
-                className="mt-5 min-h-[48px] w-full rounded-[14px] border-2 border-red-700 bg-red-900/60 py-3 text-sm font-semibold text-red-400 transition-all hover:bg-red-800/60 disabled:opacity-50"
+                className="mt-5 min-h-[48px] w-full rounded-[14px] border-2 border-red-300 bg-red-50 py-3 text-sm font-semibold text-red-600 transition-all hover:bg-red-100 disabled:opacity-50"
               >
                 ⛔ Emergency Stop (no PIN)
               </button>
@@ -1050,7 +1050,7 @@ export default function UserFlow() {
         <div className="space-y-4 text-center">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Payment checkpoint</p>
-            <h2 className="text-2xl font-black text-white">Settle Payment</h2>
+            <h2 className="text-2xl font-black text-slate-900">Settle Payment</h2>
           </div>
           <PaymentScreen
             booking={activeBooking}

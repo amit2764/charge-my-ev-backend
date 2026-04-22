@@ -5,9 +5,11 @@ import api from './api';
 import useReport from './hooks/useReport';
 import KYCScreen from './screens/KYCScreen';
 import VerifiedBadge from './components/VerifiedBadge';
+import { useThemeStore } from './hooks/useTheme';
 
 export default function UserProfile({ onSwitchRole }) {
   const { user, role, userProfile, setUserProfile } = useStore();
+  const { isDark, toggleTheme } = useThemeStore();
   const [isEditing, setIsEditing] = useState(false);
   const [showKycScreen, setShowKycScreen] = useState(false);
   const [formData, setFormData] = useState({ name: 'EV Owner', vehicleType: 'Tata Nexon EV', connectorType: 'CCS2', location: null });
@@ -126,67 +128,76 @@ export default function UserProfile({ onSwitchRole }) {
           </div>
           <div className="flex items-center gap-2">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Screen 5</p>
-              <h2 className="text-2xl font-black text-white">Your Profile</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Screen 5</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white">Your Profile</h2>
             </div>
           {kycStatus === 'VERIFIED' && <VerifiedBadge />}
           </div>
         </div>
-        {!isEditing && <button onClick={() => setIsEditing(true)} className="glass-surface rounded-[18px] px-4 py-2 text-cyan-300 font-semibold">Edit</button>}
+        {!isEditing && <button onClick={() => setIsEditing(true)} className="glass-surface rounded-[18px] px-4 py-2 text-teal-700 dark:text-cyan-300 font-semibold">Edit</button>}
       </div>
 
       <Card>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="mb-1 text-base font-bold text-cyan-300">App mode</h3>
-            <p className="text-sm text-gray-400">Switch between charging as a user and managing sessions as a host.</p>
+            <h3 className="mb-1 text-base font-bold text-teal-700 dark:text-cyan-300">App mode</h3>
+            <p className="text-sm text-slate-500 dark:text-gray-400">Switch between charging as a user and managing sessions as a host.</p>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+          <span className="rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-300">
             {role}
           </span>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             onClick={() => onSwitchRole?.('user')}
-            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(59,130,246,0.24)]' : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'user' ? 'bg-gradient-to-r from-teal-500 to-cyan-400 text-white shadow-[0_14px_30px_rgba(20,184,166,0.28)]' : 'border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'}`}
           >
             User mode
           </button>
           <button
             onClick={() => onSwitchRole?.('host')}
-            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'host' ? 'bg-gradient-to-r from-emerald-400 to-cyan-300 text-slate-950 shadow-[0_14px_30px_rgba(34,197,94,0.22)]' : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+            className={`min-h-[48px] rounded-[18px] px-4 py-3 text-sm font-bold transition ${role === 'host' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_14px_30px_rgba(16,185,129,0.28)]' : 'border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'}`}
           >
             Host mode
+          </button>
+        </div>
+        <div className="mt-3 flex items-center justify-between border-t border-slate-200 dark:border-slate-700/60 pt-3">
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Theme</span>
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${isDark ? 'bg-slate-800 text-teal-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+          >
+            {isDark ? '🌙 Dark mode' : '☀️ Light mode'}
           </button>
         </div>
       </Card>
 
       {/* Trust Score Banner */}
-      <div className="glass-surface overflow-hidden rounded-[28px] border border-blue-400/12 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_40%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(17,24,39,0.82))] p-5 shadow-[0_24px_60px_rgba(59,130,246,0.16)]">
+      <div className="overflow-hidden rounded-[28px] border border-teal-200/40 dark:border-blue-400/12 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.18),transparent_40%),linear-gradient(135deg,rgba(240,253,250,0.95),rgba(236,254,255,0.88))] dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.2),transparent_40%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(17,24,39,0.82))] p-5 shadow-[0_24px_60px_rgba(20,184,166,0.16)] dark:shadow-[0_24px_60px_rgba(59,130,246,0.16)]">
         <div className="flex justify-between items-center gap-4">
         <div>
-          <p className="text-cyan-100 text-sm font-semibold mb-1">Trust Score</p>
-          <p className="premium-number text-4xl font-black text-white">{trustData?.trustScore || 85}<span className="text-lg text-cyan-400">/100</span></p>
+          <p className="text-teal-700 dark:text-cyan-100 text-sm font-semibold mb-1">Trust Score</p>
+          <p className="premium-number text-4xl font-black text-slate-900 dark:text-white">{trustData?.trustScore || 85}<span className="text-lg text-teal-600 dark:text-cyan-400">/100</span></p>
         </div>
         <div className="text-right">
-          <p className="text-cyan-100 text-sm font-semibold mb-1">Reliability</p>
-          <p className="text-xl font-bold text-white">{trustData?.metrics?.paymentReliability || 100}%</p>
+          <p className="text-teal-700 dark:text-cyan-100 text-sm font-semibold mb-1">Reliability</p>
+          <p className="text-xl font-bold text-slate-900 dark:text-white">{trustData?.metrics?.paymentReliability || 100}%</p>
         </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-[20px] bg-white/5 px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Identity</p>
-            <p className="mt-1 text-sm font-bold text-white">{kycStatus}</p>
+          <div className="rounded-[20px] bg-teal-500/8 dark:bg-white/5 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-teal-700 dark:text-slate-400">Identity</p>
+            <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{kycStatus}</p>
           </div>
-          <div className="rounded-[20px] bg-white/5 px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Role</p>
-            <p className="mt-1 text-sm font-bold text-white capitalize">{role}</p>
+          <div className="rounded-[20px] bg-teal-500/8 dark:bg-white/5 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-teal-700 dark:text-slate-400">Role</p>
+            <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white capitalize">{role}</p>
           </div>
         </div>
       </div>
 
       <Card>
-        {error && <div className="p-3 mb-4 text-sm text-red-400 bg-red-900/50 border border-red-800 rounded-lg">{error}</div>}
+        {error && <div className="p-3 mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-lg">{error}</div>}
         
         {isEditing ? (
           <div className="space-y-2">
@@ -211,19 +222,19 @@ export default function UserProfile({ onSwitchRole }) {
           </div>
         ) : (
           <div className="space-y-4">
-            <div><p className="text-sm text-gray-500 font-semibold">Phone Number</p><p className="text-lg text-white">{user}</p></div>
-            <div><p className="text-sm text-gray-500 font-semibold">Name</p><p className="text-lg text-white">{formData.name}</p></div>
-            <div><p className="text-sm text-gray-500 font-semibold">Vehicle</p><p className="text-lg text-white">{formData.vehicleType}</p></div>
-            <div><p className="text-sm text-gray-500 font-semibold">Connector</p><p className="text-lg text-white">{formData.connectorType || 'CCS2'}</p></div>
+            <div><p className="text-sm text-slate-500 font-semibold">Phone Number</p><p className="text-lg text-slate-900 dark:text-white">{user}</p></div>
+            <div><p className="text-sm text-slate-500 font-semibold">Name</p><p className="text-lg text-slate-900 dark:text-white">{formData.name}</p></div>
+            <div><p className="text-sm text-slate-500 font-semibold">Vehicle</p><p className="text-lg text-slate-900 dark:text-white">{formData.vehicleType}</p></div>
+            <div><p className="text-sm text-slate-500 font-semibold">Connector</p><p className="text-lg text-slate-900 dark:text-white">{formData.connectorType || 'CCS2'}</p></div>
           </div>
         )}
       </Card>
 
       <Card>
-        <h3 className="mb-2 text-base font-bold text-cyan-300">Identity verification</h3>
-        <p className="text-sm text-gray-300">Status: <span className="font-semibold text-white">{kycStatus}</span></p>
+        <h3 className="mb-2 text-base font-bold text-teal-700 dark:text-cyan-300">Identity verification</h3>
+        <p className="text-sm text-slate-600 dark:text-gray-300">Status: <span className="font-semibold text-slate-900 dark:text-white">{kycStatus}</span></p>
         {kycStatus === 'REJECTED' && !!kycReason && (
-          <p className="mt-2 rounded-lg border border-red-700 bg-red-900/30 px-3 py-2 text-xs text-red-300">Reason: {kycReason}</p>
+          <p className="mt-2 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/30 px-3 py-2 text-xs text-red-600 dark:text-red-300">Reason: {kycReason}</p>
         )}
         {kycStatus !== 'VERIFIED' && (
           <Button className="mt-3" onClick={() => setShowKycScreen(true)}>
@@ -234,17 +245,17 @@ export default function UserProfile({ onSwitchRole }) {
 
       {role === 'host' && (
         <Card>
-          <h3 className="mb-3 text-base font-bold text-cyan-300">Blocked Users</h3>
-          {blockedLoading && <p className="text-sm text-gray-400">Loading blocked users...</p>}
+          <h3 className="mb-3 text-base font-bold text-teal-700 dark:text-cyan-300">Blocked Users</h3>
+          {blockedLoading && <p className="text-sm text-slate-500 dark:text-gray-400">Loading blocked users...</p>}
           {!blockedLoading && blockedUsers.length === 0 && (
-            <p className="text-sm text-gray-400">No blocked users.</p>
+            <p className="text-sm text-slate-500 dark:text-gray-400">No blocked users.</p>
           )}
           <div className="space-y-2">
             {blockedUsers.map((entry) => (
-              <div key={entry.blockId || entry.blockedUserId} className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2">
+              <div key={entry.blockId || entry.blockedUserId} className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 px-3 py-2">
                 <div>
-                  <p className="text-sm font-semibold text-white">{entry.displayName || entry.blockedUserId}</p>
-                  <p className="text-xs text-gray-400">{entry.blockedUserId}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{entry.displayName || entry.blockedUserId}</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">{entry.blockedUserId}</p>
                 </div>
                 <Button
                   variant="outline"
