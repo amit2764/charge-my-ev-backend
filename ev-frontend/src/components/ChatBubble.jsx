@@ -1,6 +1,6 @@
 export default function ChatBubble({ message, isMine }) {
-  const created = message?.createdAt?.toDate ? message.createdAt.toDate() : new Date(message?.createdAt || Date.now());
-  const time = created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const created = message?.createdAt?.toDate ? message.createdAt.toDate() : (message?.createdAt ? new Date(message.createdAt) : null);
+  const time = created ? created.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
   return (
     <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>

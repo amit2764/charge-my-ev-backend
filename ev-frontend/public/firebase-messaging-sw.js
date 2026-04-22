@@ -1,3 +1,5 @@
+/* eslint-env serviceworker */
+/* global importScripts, firebase, clients */
 // firebase-messaging-sw.js
 // Must be served at /firebase-messaging-sw.js (from the public/ folder)
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useStore } from '../store';
-import { Card } from '../components';
 import NotificationPrefRow from '../components/NotificationPrefRow';
+import { useTheme } from '../hooks/useTheme';
 
 const DEFAULT_NOTIFICATION_PREFS = {
   bookingUpdates: true,
@@ -38,6 +38,8 @@ function arePrefsEqual(a, b) {
 
 export default function SettingsScreen() {
   const { user } = useStore();
+  const { c } = useTheme();
+  const s = makeStyles(c);
   const [prefs, setPrefs] = useState(DEFAULT_NOTIFICATION_PREFS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,7 +67,7 @@ export default function SettingsScreen() {
         if (!arePrefsEqual(data.notificationPrefs, normalized)) {
           await setDoc(userRef, { notificationPrefs: normalized }, { merge: true });
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setError('Failed to load notification preferences.');
         }
@@ -98,21 +100,21 @@ export default function SettingsScreen() {
 
     try {
       await setDoc(userRef, { notificationPrefs: nextPrefs }, { merge: true });
-    } catch (err) {
+    } catch {
       setPrefs(previousPrefs);
       setError('Failed to save preference. Please try again.');
     }
   };
 
   return (
-    <div className="p-4 pb-28 space-y-4">
-      <h2 className="text-2xl font-bold text-white">Settings</h2>
+    <div style={s.page}>
+      <h2 style={s.title}>Settings</h2>
 
-      <Card>
-        <h3 className="mb-3 text-base font-bold text-cyan-300">Notification preferences</h3>
-        {error ? <p className="mb-3 text-sm text-red-400">{error}</p> : null}
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>Notification preferences</h3>
+        {error ? <p style={s.error}>{error}</p> : null}
 
-        <div className="space-y-2">
+        <div style={s.prefsList}>
           <NotificationPrefRow
             label="Booking updates"
             description="Request accepted, booking confirmed, and booking status changes"
@@ -154,7 +156,47 @@ export default function SettingsScreen() {
             onChange={(value) => updatePref('promotions', value)}
           />
         </div>
-      </Card>
+      </div>
     </div>
   );
+}
+
+function makeStyles(c) {
+  return {
+    page: {
+      padding: 16,
+      paddingBottom: 112,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+    },
+    title: {
+      margin: 0,
+      fontSize: 24,
+      fontWeight: 700,
+      color: c.text,
+    },
+    card: {
+      border: `1px solid ${c.border}`,
+      borderRadius: 16,
+      background: c.surface,
+      padding: 16,
+    },
+    cardTitle: {
+      margin: '0 0 12px',
+      fontSize: 16,
+      fontWeight: 700,
+      color: c.brandPrimary,
+    },
+    error: {
+      margin: '0 0 12px',
+      fontSize: 14,
+      color: c.error,
+    },
+    prefsList: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+    },
+  };
 }

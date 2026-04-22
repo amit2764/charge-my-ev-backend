@@ -37,8 +37,6 @@ export default function useRating(bookingId, fromUserId) {
       });
       setDone(true);
       setAlreadyRated(true);
-    } catch (err) {
-      throw err;
     } finally {
       setSubmitting(false);
     }

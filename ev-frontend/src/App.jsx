@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { useStore } from './store';
@@ -29,7 +29,6 @@ export default function App() {
     user: DEFAULT_TAB_BY_ROLE.user,
     host: DEFAULT_TAB_BY_ROLE.host
   });
-  const [authGate, setAuthGate] = useState({ mode: 'none', rememberedUser: null });
   const [foregroundBanner, setForegroundBanner] = useState(null);
 
   // Wait for Firebase Auth to restore its session before allowing Firestore reads.
@@ -59,21 +58,19 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  useEffect(() => {
+  const authGate = useMemo(() => {
     const rememberedUser = localStorage.getItem('authUser') || localStorage.getItem('user') || null;
     const pinHash = localStorage.getItem('pinHash') || null;
 
     if (user && !pinHash) {
-      setAuthGate({ mode: 'setup', rememberedUser: user });
-      return;
+      return { mode: 'setup', rememberedUser: user };
     }
 
     if (!user && rememberedUser && pinHash) {
-      setAuthGate({ mode: 'unlock', rememberedUser });
-      return;
+      return { mode: 'unlock', rememberedUser };
     }
 
-    setAuthGate({ mode: 'none', rememberedUser: rememberedUser || null });
+    return { mode: 'none', rememberedUser: rememberedUser || null };
   }, [user]);
 
   const effectiveRole = role;
@@ -98,7 +95,6 @@ export default function App() {
     localStorage.removeItem('authUser');
     localStorage.removeItem('quickUnlockFailures');
     setUser(null);
-    setAuthGate({ mode: 'none', rememberedUser: null });
   };
 
   if (!firebaseReady) {
@@ -113,7 +109,7 @@ export default function App() {
     return (
       <PINSetup
         userId={user}
-        onComplete={() => setAuthGate({ mode: 'none', rememberedUser: user })}
+        onComplete={() => {}}
         onUsePhone={forcePhoneOtp}
       />
     );
@@ -126,7 +122,6 @@ export default function App() {
         onSuccess={(unlockedUser) => {
           localStorage.removeItem('quickUnlockFailures');
           setUser(unlockedUser);
-          setAuthGate({ mode: 'none', rememberedUser: unlockedUser });
         }}
         onForceOtp={forcePhoneOtp}
       />

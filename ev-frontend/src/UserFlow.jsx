@@ -101,8 +101,6 @@ export default function UserFlow() {
   
   // Live Charging Timer State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [rating, setRating] = useState(5);
-  const [review, setReview] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
@@ -765,23 +763,6 @@ export default function UserFlow() {
     } finally { setLoading(false); }
   };
 
-  const submitRating = async () => {
-    if (!activeBooking?.id || !activeBooking?.hostId) {
-      setError('No completed booking found to rate.');
-      setStep('REQUEST');
-      return;
-    }
-
-    setLoading(true); setError('');
-    try {
-      await api.post('/api/rating', { bookingId: activeBooking.id, userId: user, hostId: activeBooking.hostId, rating, review });
-      setActiveBooking(null); setActiveRequest(null); setHosts([]); setElapsedSeconds(0); setStep('REQUEST');
-      await syncStateFromBackend();
-    } catch (err) { 
-      setError('Failed to submit rating: ' + (err.response?.data?.error || err.message)); 
-    } finally { setLoading(false); }
-  };
-
   // Formatting helpers
   const formatTime = (secs) => {
     const h = Math.floor(secs / 3600).toString().padStart(2, '0');
@@ -791,9 +772,6 @@ export default function UserFlow() {
   };
   const bookingPrice = toFiniteNumber(activeBooking?.price, 0);
   const runningCost = bookingPrice > 0 ? ((elapsedSeconds / 3600) * bookingPrice).toFixed(2) : '0.00';
-  const displayFinalAmount = toFiniteNumber(activeBooking?.finalAmount, 0).toFixed(2);
-  const displayDurationMinutes = toFiniteNumber(activeBooking?.durationMinutes, 0).toFixed(1);
-
   return (
     <div className="flow-shell p-4 pb-6 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
