@@ -149,7 +149,6 @@ export default function App() {
             if (foregroundBanner.deepLink) window.location.href = foregroundBanner.deepLink;
             setForegroundBanner(null);
           }}
-          className="fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] z-[2000] mx-auto max-w-md cursor-pointer rounded-[24px] border border-teal-200 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(239,253,250,0.95))] px-4 py-3 shadow-[0_20px_50px_rgba(13,148,136,0.14)] backdrop-blur-xl"
           className="fixed inset-x-0 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] z-[2000] mx-auto max-w-md cursor-pointer rounded-[24px] border border-teal-200 dark:border-teal-800/50 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(239,253,250,0.95))] dark:bg-[linear-gradient(135deg,rgba(20,23,32,0.98),rgba(26,31,43,0.95))] px-4 py-3 shadow-[0_20px_50px_rgba(13,148,136,0.14)] backdrop-blur-xl"
         >
           <p className="text-sm font-bold text-teal-700 dark:text-teal-300">{foregroundBanner.title}</p>
