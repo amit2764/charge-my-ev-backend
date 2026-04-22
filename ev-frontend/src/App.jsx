@@ -63,7 +63,6 @@ export default function App() {
   const [discoveryFilters, setDiscoveryFilters] = useState([]);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowError, setFlowError] = useState('');
-  const [hostDashboardMode, setHostDashboardMode] = useState('modern');
   const [isHostOnline, setIsHostOnline] = useState(false);
 
   const tx = (key, fallback) => {
@@ -131,19 +130,9 @@ export default function App() {
   };
 
   const switchRoleFromProfile = (nextRole) => {
-    if (nextRole === 'host') {
-      setHostDashboardMode('modern');
-    }
     setRole(nextRole);
     setRoleTab(nextRole, 'profile');
   };
-
-  useEffect(() => {
-    if (effectiveRole !== 'host') return;
-    if (effectiveTab === HOST_TABS.DASHBOARD) {
-      setHostDashboardMode('modern');
-    }
-  }, [effectiveRole, effectiveTab]);
 
   const normalizedProfile = effectiveRole === 'host' ? (hostProfile || userProfile || {}) : (userProfile || hostProfile || {});
   const bookingResolution = useMemo(() => resolveBookingState(activeBooking, user), [activeBooking, user]);
@@ -607,25 +596,97 @@ export default function App() {
         ) : (
           <>
             {effectiveTab === HOST_TABS.DASHBOARD && (
-              hostDashboardMode === 'legacy' ? (
-                <HostFlow />
-              ) : (
-                <HostHomeScreen
-                  host={{ displayName: normalizedProfile?.name || user, photoURL: normalizedProfile?.photoUrl || normalizedProfile?.avatar || '' }}
-                  isOnline={isHostOnline}
-                  onToggleOnline={setIsHostOnline}
-                  activeBooking={activeBooking}
-                  pendingRequests={[]}
-                  earnings={hostSummary}
-                  chargers={Array.isArray(normalizedProfile?.chargers) ? normalizedProfile.chargers : []}
-                  recentActivity={hostHistoryItems}
-                  onManageSession={() => setHostDashboardMode('legacy')}
-                  onReviewRequests={() => setHostDashboardMode('legacy')}
-                  onOpenEarnings={() => setRoleTab('host', HOST_TABS.EARNINGS)}
-                  onAddCharger={() => setRoleTab('host', HOST_TABS.PROFILE)}
-                  onOpenCharger={() => setHostDashboardMode('legacy')}
-                />
-              )
+              <>
+                {flowError && (
+                  <div className="mx-4 mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-800/60 dark:bg-rose-900/30 dark:text-rose-200">
+                    {flowError}
+                  </div>
+                )}
+
+                {/* No active booking — show home dashboard */}
+                {!activeBooking && (
+                  <HostHomeScreen
+                    host={{ displayName: normalizedProfile?.name || user, photoURL: normalizedProfile?.photoUrl || normalizedProfile?.avatar || '' }}
+                    isOnline={isHostOnline}
+                    onToggleOnline={setIsHostOnline}
+                    activeBooking={null}
+                    pendingRequests={[]}
+                    earnings={hostSummary}
+                    chargers={Array.isArray(normalizedProfile?.chargers) ? normalizedProfile.chargers : []}
+                    recentActivity={hostHistoryItems}
+                    onManageSession={() => {}}
+                    onReviewRequests={() => {}}
+                    onOpenEarnings={() => setRoleTab('host', HOST_TABS.EARNINGS)}
+                    onAddCharger={() => setRoleTab('host', HOST_TABS.PROFILE)}
+                    onOpenCharger={() => {}}
+                  />
+                )}
+
+                {/* Active booking — CONFIRM / CHARGING_WAIT: host sees booking details + start PIN display */}
+                {activeBooking && (bookingResolution.screen === 'CONFIRM' || bookingResolution.screen === 'CHARGING_WAIT') && (
+                  <BookingConfirmScreen
+                    role="host"
+                    booking={activeBooking}
+                    counterparty={{ name: activeBooking?.userDisplayName || activeBooking?.userId || 'User' }}
+                    startPin={activeBooking?.startPin || ''}
+                    loading={flowLoading}
+                    onValidateVisibility={() => {}}
+                  />
+                )}
+
+                {/* Active booking — CHARGING_RUN: host sees live session + can stop */}
+                {activeBooking && bookingResolution.screen === 'CHARGING_RUN' && (
+                  <ChargingSessionScreen
+                    role="host"
+                    session={{
+                      bookingId: activeBooking?.id,
+                      hostName: normalizedProfile?.name || 'Host',
+                      address: activeBooking?.address || '',
+                      connectorType: activeBooking?.chargingMode || 'AC',
+                      ratePerKwh: activeBooking?.price || 0,
+                      startedAt: activeBooking?.startedAt,
+                      kwhDelivered: activeBooking?.kwhDelivered || 0,
+                      estimatedTotal: activeBooking?.estimatedTotal || 0,
+                      stopPin: activeBooking?.stopPin || '',
+                    }}
+                    loading={flowLoading}
+                    onStopCharging={handleStopCharging}
+                    onEmergencyStop={handleEmergencyStop}
+                  />
+                )}
+
+                {/* Active booking — PAYMENT: host confirms payment received */}
+                {activeBooking && bookingResolution.screen === 'PAYMENT' && (
+                  <PaymentScreen
+                    paymentSubState={bookingResolution.subState}
+                    kwhDelivered={activeBooking?.kwhDelivered || 0}
+                    total={activeBooking?.totalAmount || activeBooking?.price || 0}
+                    paymentMethod={activeBooking?.paymentMethod || 'CASH'}
+                    host={{ name: normalizedProfile?.name || 'Host' }}
+                    user={{ name: activeBooking?.userDisplayName || activeBooking?.userId || 'User' }}
+                    loading={flowLoading}
+                    onHostConfirmReceived={() => handlePaymentConfirm('host')}
+                    onExitForNow={() => setRoleTab('host', HOST_TABS.EARNINGS)}
+                    onValidateVisibility={() => {}}
+                  />
+                )}
+
+                {/* Active booking — RATING: host rates user */}
+                {activeBooking && bookingResolution.screen === 'RATING' && (
+                  <RatingScreen
+                    role="host"
+                    booking={activeBooking}
+                    counterparty={{ name: activeBooking?.userDisplayName || activeBooking?.userId || 'User' }}
+                    onSubmitRating={handleRatingSubmit}
+                    onSkip={() => { setActiveBooking(null); setActiveRequest(null); }}
+                  />
+                )}
+
+                {/* Unrecognised state while booking exists — legacy fallback */}
+                {activeBooking && !['CONFIRM', 'CHARGING_WAIT', 'CHARGING_RUN', 'PAYMENT', 'RATING'].includes(bookingResolution.screen) && (
+                  <HostFlow />
+                )}
+              </>
             )}
             {effectiveTab === HOST_TABS.EARNINGS && (
               <EarningsDashboardScreen
