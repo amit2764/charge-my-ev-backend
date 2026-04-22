@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.jsx'
 import { initializeSentry } from './sentry'
+import { I18nProvider } from './i18n'
 
 // Initialize error tracking
 initializeSentry()
@@ -69,6 +70,8 @@ window.addEventListener('unhandledrejection', (event) => {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </StrictMode>,
 )

@@ -124,7 +124,23 @@
     "name": "Name",
     "email": "Email",
     "phone": "Phone",
-    "joined": "Member since"
+    "joined": "Member since",
+    "appMode": "App mode",
+    "userMode": "User",
+    "hostMode": "Host"
+  },
+  "appShell": {
+    "brand": "Charge My EV",
+    "hostWorkspace": "Host workspace",
+    "userWorkspace": "User workspace",
+    "logout": "Logout",
+    "charge": "Charge",
+    "discover": "Discover",
+    "history": "History",
+    "dashboard": "Dashboard",
+    "earnings": "Earnings",
+    "profile": "Profile",
+    "hostFallback": "Host Charger"
   },
   "settings": {
     "title": "Settings",

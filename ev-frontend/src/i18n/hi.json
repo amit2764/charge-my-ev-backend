@@ -124,7 +124,23 @@
     "name": "नाम",
     "email": "ईमेल",
     "phone": "फ़ोन",
-    "joined": "सदस्य बने"
+    "joined": "सदस्य बने",
+    "appMode": "ऐप मोड",
+    "userMode": "यूज़र",
+    "hostMode": "होस्ट"
+  },
+  "appShell": {
+    "brand": "Charge My EV",
+    "hostWorkspace": "होस्ट वर्कस्पेस",
+    "userWorkspace": "यूज़र वर्कस्पेस",
+    "logout": "लॉगआउट",
+    "charge": "चार्ज",
+    "discover": "डिस्कवर",
+    "history": "इतिहास",
+    "dashboard": "डैशबोर्ड",
+    "earnings": "कमाई",
+    "profile": "प्रोफ़ाइल",
+    "hostFallback": "होस्ट चार्जर"
   },
   "settings": {
     "title": "सेटिंग्स",

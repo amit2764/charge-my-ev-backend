@@ -25,6 +25,7 @@ export default function ProfileScreen({
   onOpenNotificationPreferences,
   onChangeLanguage,
   onOpenEditProfile,
+  onSwitchRole,
   onOpenMyChargers,
   onOpenAvailability,
   onOpenEarningsDashboard,
@@ -137,6 +138,17 @@ export default function ProfileScreen({
         )}
 
         <Section title={tx('profile.app', 'App')} s={s}>
+          <div style={s.languageRow}>
+            <span style={s.menuLabel}>{tx('profile.appMode', isHindi ? 'ऐप मोड' : 'App mode')}</span>
+            <div style={s.langPills}>
+              <button type="button" style={role === 'user' ? s.langPillActive : s.langPill} onClick={() => onSwitchRole?.('user')}>
+                {tx('profile.userMode', isHindi ? 'यूज़र' : 'User')}
+              </button>
+              <button type="button" style={role === 'host' ? s.langPillActive : s.langPill} onClick={() => onSwitchRole?.('host')}>
+                {tx('profile.hostMode', isHindi ? 'होस्ट' : 'Host')}
+              </button>
+            </div>
+          </div>
           <ToggleRow
             label={tx('profile.theme', 'Dark / Light mode')}
             isDark={isDark}

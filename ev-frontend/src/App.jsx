@@ -5,15 +5,17 @@ import { useStore } from './store';
 import { initFCM, onForegroundMessage } from './utils/fcm';
 import LoginScreen from './LoginScreen';
 import UserFlow from './UserFlow';
-import UserProfile from './UserProfile';
-import UserHistory from './UserHistory';
-import HostEarnings from './HostEarnings';
 import HostFlow from './HostFlow';
 import PINSetup from './components/PINSetup';
 import PINUnlock from './components/PINUnlock';
-import DiscoveryMapScreen from './screens/DiscoveryMapScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import SessionHistoryScreen from './screens/SessionHistoryScreen';
+import EarningsDashboardScreen from './screens/host/EarningsDashboardScreen';
+import UserDiscoveryMapScreen from './screens/user/DiscoveryMapScreen';
 import { DEFAULT_TAB_BY_ROLE, VALID_TABS_BY_ROLE, USER_TABS, HOST_TABS } from './navigation';
 import { useThemeStore } from './hooks/useTheme';
+import useNearbyHosts from './hooks/useNearbyHosts';
+import { useI18n } from './i18n';
 
 function getDefaultTab(role) {
   return DEFAULT_TAB_BY_ROLE[role] || DEFAULT_TAB_BY_ROLE.user;
@@ -24,14 +26,22 @@ function isValidTab(role, tab) {
 }
 
 export default function App() {
-  const { user, role, setRole, logout, setUser } = useStore();
+  const { user, role, setRole, logout, setUser, activeBooking, userProfile, hostProfile } = useStore();
   const { isDark } = useThemeStore();
+  const { t, setLanguage } = useI18n();
+  const { hosts: nearbyHosts, filters: nearbyFilters, setFilters: setNearbyFilters } = useNearbyHosts(8);
   const [firebaseReady, setFirebaseReady] = useState(false);
   const [tabsByRole, setTabsByRole] = useState({
     user: DEFAULT_TAB_BY_ROLE.user,
     host: DEFAULT_TAB_BY_ROLE.host
   });
   const [foregroundBanner, setForegroundBanner] = useState(null);
+  const [discoveryFilters, setDiscoveryFilters] = useState([]);
+
+  const tx = (key, fallback) => {
+    const val = t(key);
+    return val === key ? fallback : val;
+  };
 
   // Wait for Firebase Auth to restore its session before allowing Firestore reads.
   // Without this gate, onSnapshot / getDocs fire while request.auth is still null
@@ -95,6 +105,56 @@ export default function App() {
   const switchRoleFromProfile = (nextRole) => {
     setRole(nextRole);
     setRoleTab(nextRole, 'profile');
+  };
+
+  const normalizedProfile = effectiveRole === 'host' ? (hostProfile || userProfile || {}) : (userProfile || hostProfile || {});
+
+  const mappedDiscoveryChargers = useMemo(() => {
+    return (nearbyHosts || []).map((host, idx) => ({
+      id: String(host.id || host.hostId || host.userId || idx),
+      lat: Number(host.lat ?? host.latitude ?? 0),
+      lng: Number(host.lng ?? host.longitude ?? 0),
+      status: host.available === false ? 'OFFLINE' : 'AVAILABLE',
+      hostName: host.name || host.hostName || 'Host Charger',
+      hostAvatar: host.photoUrl || host.avatar || '',
+      kycVerified: Boolean(host.kycVerified),
+      rating: Number(host.rating || 0),
+      reviewCount: Number(host.reviewCount || 0),
+      distanceKm: Number(host.distance || 0),
+      connectorType: host.connectorType || 'Type 2',
+      powerKw: Number(host.powerKw || 0),
+      pricePerKwh: Number(host.pricePerUnit || host.pricePerKwh || 0),
+      pricePerHour: Number(host.pricePerHour || 0),
+      nextAvailableAt: host.nextAvailableAt || null,
+      raw: host,
+    })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng) && item.lat !== 0 && item.lng !== 0);
+  }, [nearbyHosts]);
+
+  const mappedDiscoveryFilterKeys = useMemo(() => {
+    const next = [];
+    if (nearbyFilters.connectorType) next.push(nearbyFilters.connectorType);
+    if (nearbyFilters.minKw && Number(nearbyFilters.minKw) > 22) next.push('Fast (>22kW)');
+    if (discoveryFilters.includes('Available now')) next.push('Available now');
+    return next;
+  }, [nearbyFilters, discoveryFilters]);
+
+  const toggleDiscoveryFilter = (filter) => {
+    setDiscoveryFilters((prev) => {
+      const exists = prev.includes(filter);
+      const next = exists ? prev.filter((f) => f !== filter) : [...prev, filter];
+
+      const connectorFilters = ['Type 1', 'Type 2', 'CCS', 'CHAdeMO'];
+      const selectedConnector = connectorFilters.find((f) => next.includes(f)) || '';
+      const wantsFast = next.includes('Fast (>22kW)');
+
+      setNearbyFilters((current) => ({
+        ...current,
+        connectorType: selectedConnector,
+        minKw: wantsFast ? '23' : '',
+      }));
+
+      return next;
+    });
   };
 
   const forcePhoneOtp = () => {
@@ -161,12 +221,14 @@ export default function App() {
         <div className="min-w-0 flex-1 px-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-600 dark:text-teal-400">Charge My EV</p>
           <h1 className="truncate text-lg font-black text-slate-900 dark:text-white sm:text-xl">
-            {effectiveRole === 'host' ? 'Host workspace' : 'User workspace'}
+            {effectiveRole === 'host'
+              ? tx('appShell.hostWorkspace', 'Host workspace')
+              : tx('appShell.userWorkspace', 'User workspace')}
           </h1>
         </div>
 
         <button onClick={logout} className="glass-surface shrink-0 rounded-[18px] px-4 py-2 text-sm font-bold text-rose-600 transition hover:border-rose-200 hover:text-rose-700">
-          Logout
+          {tx('appShell.logout', 'Logout')}
         </button>
       </header>
 
@@ -176,21 +238,94 @@ export default function App() {
           <>
             {effectiveTab === USER_TABS.CHARGE && <UserFlow />}
             {effectiveTab === USER_TABS.DISCOVER && (
-              <DiscoveryMapScreen
-                onRequestCharge={(host) => {
-                  void host;
+              <UserDiscoveryMapScreen
+                isDark={isDark}
+                chargers={mappedDiscoveryChargers}
+                filters={mappedDiscoveryFilterKeys}
+                onToggleFilter={toggleDiscoveryFilter}
+                onRequestCharge={(charger) => {
+                  if (charger?.raw) {
+                    localStorage.setItem('discoveryPrefillHost', JSON.stringify(charger.raw));
+                  }
                   setRoleTab('user', USER_TABS.CHARGE);
                 }}
+                onSearch={() => {}}
+                onGetDirections={() => {}}
+                onOpenHostDetail={() => {}}
+                onSelectCharger={() => {}}
+                onLocateMe={() => {}}
+                onToggleListView={() => {}}
               />
             )}
-            {effectiveTab === USER_TABS.HISTORY && <UserHistory />}
-            {effectiveTab === USER_TABS.PROFILE && <UserProfile onSwitchRole={switchRoleFromProfile} />}
+            {effectiveTab === USER_TABS.HISTORY && (
+              <SessionHistoryScreen
+                booking={activeBooking}
+                myUserId={user}
+                role="user"
+                onPrimaryAction={() => setRoleTab('user', USER_TABS.DISCOVER)}
+                onExitForNow={() => setRoleTab('user', USER_TABS.CHARGE)}
+              />
+            )}
+            {effectiveTab === USER_TABS.PROFILE && (
+              <ProfileScreen
+                role={effectiveRole}
+                booking={activeBooking}
+                myUserId={user}
+                userProfile={normalizedProfile}
+                isKycVerified={Boolean(normalizedProfile?.kycVerified)}
+                hasCharger={Boolean(hostProfile)}
+                onToggleTheme={() => {}}
+                onChangeLanguage={setLanguage}
+                onOpenKyc={() => {}}
+                onOpenNotificationPreferences={() => {}}
+                onOpenEditProfile={() => {}}
+                onOpenMyChargers={() => setRoleTab('host', HOST_TABS.DASHBOARD)}
+                onOpenAvailability={() => setRoleTab('host', HOST_TABS.DASHBOARD)}
+                onOpenEarningsDashboard={() => setRoleTab('host', HOST_TABS.EARNINGS)}
+                onOpenHelp={() => {}}
+                onOpenTerms={() => {}}
+                onOpenPrivacy={() => {}}
+                onRateApp={() => {}}
+                onLogout={logout}
+                onDeleteAccount={() => {}}
+                onSwitchRole={switchRoleFromProfile}
+              />
+            )}
           </>
         ) : (
           <>
             {effectiveTab === HOST_TABS.DASHBOARD && <HostFlow />}
-            {effectiveTab === HOST_TABS.EARNINGS && <HostEarnings />}
-            {effectiveTab === HOST_TABS.PROFILE && <UserProfile onSwitchRole={switchRoleFromProfile} />}
+            {effectiveTab === HOST_TABS.EARNINGS && (
+              <EarningsDashboardScreen
+                booking={activeBooking}
+                myUserId={user}
+              />
+            )}
+            {effectiveTab === HOST_TABS.PROFILE && (
+              <ProfileScreen
+                role={effectiveRole}
+                booking={activeBooking}
+                myUserId={user}
+                userProfile={normalizedProfile}
+                isKycVerified={Boolean(normalizedProfile?.kycVerified)}
+                hasCharger={true}
+                onToggleTheme={() => {}}
+                onChangeLanguage={setLanguage}
+                onOpenKyc={() => {}}
+                onOpenNotificationPreferences={() => {}}
+                onOpenEditProfile={() => {}}
+                onOpenMyChargers={() => setRoleTab('host', HOST_TABS.DASHBOARD)}
+                onOpenAvailability={() => setRoleTab('host', HOST_TABS.DASHBOARD)}
+                onOpenEarningsDashboard={() => setRoleTab('host', HOST_TABS.EARNINGS)}
+                onOpenHelp={() => {}}
+                onOpenTerms={() => {}}
+                onOpenPrivacy={() => {}}
+                onRateApp={() => {}}
+                onLogout={logout}
+                onDeleteAccount={() => {}}
+                onSwitchRole={switchRoleFromProfile}
+              />
+            )}
           </>
         )}
       </div>
@@ -200,17 +335,17 @@ export default function App() {
         <div className="glass-surface flex w-full items-center rounded-[28px] px-1.5 py-1.5 shadow-[0_20px_50px_rgba(13,148,136,0.12)]">
         {effectiveRole === 'user' ? (
           <>
-            <button onClick={() => setRoleTab('user', USER_TABS.CHARGE)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.CHARGE ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>⚡ Charge</button>
-            <button onClick={() => setRoleTab('user', USER_TABS.DISCOVER)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.DISCOVER ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🗺️ Discover</button>
-            <button onClick={() => setRoleTab('user', USER_TABS.HISTORY)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.HISTORY ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🕒 History</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.CHARGE)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.CHARGE ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>⚡ {tx('appShell.charge', 'Charge')}</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.DISCOVER)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.DISCOVER ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🗺️ {tx('appShell.discover', 'Discover')}</button>
+            <button onClick={() => setRoleTab('user', USER_TABS.HISTORY)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.HISTORY ? 'bg-teal-500/14 text-teal-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.2)]' : 'text-slate-500 hover:bg-teal-50 hover:text-slate-700'}`}>🕒 {tx('appShell.history', 'History')}</button>
           </>
         ) : (
           <>
-            <button onClick={() => setRoleTab('host', HOST_TABS.DASHBOARD)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.DASHBOARD ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>🏠 Dashboard</button>
-            <button onClick={() => setRoleTab('host', HOST_TABS.EARNINGS)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.EARNINGS ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>💰 Earnings</button>
+            <button onClick={() => setRoleTab('host', HOST_TABS.DASHBOARD)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.DASHBOARD ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>🏠 {tx('appShell.dashboard', 'Dashboard')}</button>
+            <button onClick={() => setRoleTab('host', HOST_TABS.EARNINGS)} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === HOST_TABS.EARNINGS ? 'bg-emerald-500/14 text-emerald-700 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.2)]' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-700'}`}>💰 {tx('appShell.earnings', 'Earnings')}</button>
           </>
         )}
-        <button onClick={() => setRoleTab(effectiveRole, 'profile')} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.PROFILE || effectiveTab === HOST_TABS.PROFILE ? 'bg-slate-900/8 text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.08)]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>👤 Profile</button>
+        <button onClick={() => setRoleTab(effectiveRole, 'profile')} className={`min-h-[48px] flex-1 rounded-[20px] px-1 py-3.5 text-center text-[13px] font-bold transition sm:text-sm ${effectiveTab === USER_TABS.PROFILE || effectiveTab === HOST_TABS.PROFILE ? 'bg-slate-900/8 text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.08)]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>👤 {tx('appShell.profile', 'Profile')}</button>
         </div>
       </div>
       
